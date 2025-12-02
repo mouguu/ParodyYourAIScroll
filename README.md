@@ -1,5 +1,7 @@
 # ParodyYourAIScroll
 
+![Preview](assets/preview.png)
+
 A Chrome extension to export AI conversations from Google AI Studio and ChatGPT.
 
 ## Features
