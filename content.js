@@ -403,21 +403,30 @@
 
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "START_SCRAPE") {
+      // Send immediate response to acknowledge start
+      sendResponse({ status: "started" });
+
       (async () => {
         try {
           const url = window.location.href;
           let markdown = "";
           if (url.includes("aistudio.google.com")) {
             // AI Studio Logic
-            chrome.runtime.sendMessage({ action: "UPDATE_STATUS", status: "Scrolling..." });
+            chrome.runtime.sendMessage({
+              action: "UPDATE_STATUS",
+              status: "Scrolling...",
+            });
             await autoScroll();
-            
-            chrome.runtime.sendMessage({ action: "UPDATE_STATUS", status: "Extracting..." });
+
+            chrome.runtime.sendMessage({
+              action: "UPDATE_STATUS",
+              status: "Extracting...",
+            });
             // Re-detect mode after scrolling
             // The original extractDataIncremental returns a boolean, not markdown.
             // We need to call formatData after extraction for AI Studio.
             await extractDataIncremental(); // Populate collectedData
-            markdown = formatData(request.format || 'markdown'); // Then format it
+            markdown = formatData(request.format || "markdown"); // Then format it
           } else if (
             url.includes("chatgpt.com") ||
             url.includes("chat.openai.com")
@@ -454,8 +463,8 @@
         }
       })();
 
-      // Return true to indicate async response (though we use sendMessage for updates)
-      return true;
+      // Return false to indicate we responded synchronously
+      return false;
     }
   });
 })();
