@@ -1,0 +1,476 @@
+/* Version 1.2 - Local Inter Font */
+
+/* Inter Font - Local */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("Font/Inter/Inter-VariableFont_opsz,wght.ttf")
+    format("truetype-variations");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("Font/Inter/Inter-Italic-VariableFont_opsz,wght.ttf")
+    format("truetype-variations");
+}
+
+/* Reset and Base Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif !important;
+}
+
+body {
+  width: 380px;
+  background-color: #ffffff;
+  color: #000000;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  padding-bottom: 16px;
+}
+
+.logo-area {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo-icon {
+  position: relative;
+  height: 32px;
+  width: 32px;
+  transition: transform 0.2s;
+}
+
+.logo-icon:hover {
+  transform: scale(1.05);
+}
+
+.app-title {
+  font-size: 1.5rem; /* text-2xl */
+  font-weight: 600;
+  line-height: 2rem;
+}
+
+.sign-in-btn {
+  background-color: transparent;
+  color: black;
+  border: 1px solid black;
+  font-size: 0.75rem; /* text-xs */
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  outline: none;
+}
+
+.sign-in-btn:hover {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.divider {
+  border: 0;
+  border-top: 1px solid black;
+}
+
+/* Content */
+.content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.intro-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1f2937;
+    color: #ffffff;
+  }
+
+  .description {
+    color: #9ca3af; /* dark:text-gray-400 */
+  }
+
+  .platform-link:hover {
+    background-color: #1f2937; /* dark:hover:bg-gray-800 */
+  }
+
+  .divider {
+    border-top-color: #374151;
+  }
+}
+
+.supported-label {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #000000;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    "Helvetica", "Arial", sans-serif;
+}
+
+.platform-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.platform-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background-color: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: #000000;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.2s;
+  text-align: left;
+}
+
+.platform-btn:hover {
+  background-color: #f9fafb;
+  text-decoration: underline;
+}
+
+.platform-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  transition: transform 0.2s;
+}
+
+.platform-btn:hover .platform-icon {
+  transform: scale(1.1);
+}
+
+.section-label {
+  font-size: 0.875rem; /* text-sm */
+  font-weight: 500;
+  color: #6b7280; /* text-gray-500 */
+}
+
+.page-title {
+  font-size: 1.125rem; /* text-lg */
+  font-weight: 600;
+}
+
+.url-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.url-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.url-text {
+  font-size: 1rem; /* text-base */
+  color: #4b5563; /* text-gray-600 */
+}
+
+/* Buttons and Actions - Persona Style */
+.action-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px; /* Use horizontal padding only, height handles vertical */
+  height: 48px; /* Fixed height to match dropdown */
+  border: 2px solid #000000;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 800; /* Extra bold for that punchy look */
+  cursor: pointer;
+  outline: none;
+  box-shadow: 4px 4px 0px 0px #000000; /* Hard shadow */
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: "Inter", sans-serif;
+  text-transform: capitalize;
+}
+
+.action-btn:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px 0px #000000;
+}
+
+.action-btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0px 0px #000000;
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: translate(4px, 4px);
+}
+
+.primary-btn {
+  background-color: #facc15; /* Bright Yellow */
+  color: black;
+}
+
+.secondary-btn {
+  background-color: #facc15;
+  color: black;
+}
+
+.btn-icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.5px; /* Thicker icons */
+}
+
+.btn-text {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px; /* Increased gap to match design */
+}
+
+.custom-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.options-menu {
+  position: absolute;
+  bottom: 100%; /* Open upwards */
+  left: 0;
+  width: 100%;
+  margin-bottom: 8px;
+  background-color: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 12px;
+  box-shadow: 4px 4px 0px 0px #000000;
+  z-index: 50;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+
+.options-menu.hidden {
+  display: none;
+}
+
+.option-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: black;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background-color 0.1s;
+  font-family: "Inter", sans-serif;
+}
+
+.option-item:hover {
+  background-color: #facc15; /* Highlight with yellow */
+}
+
+.option-item.selected {
+  background-color: #facc15;
+}
+
+.check-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.check-icon.hidden {
+  opacity: 0;
+}
+
+/* Adjust format-select to act as trigger */
+.format-select {
+  width: 100%;
+  background-color: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 12px;
+  padding: 12px;
+  padding-right: 12px; /* Reset padding */
+  font-size: 1rem;
+  font-weight: 800;
+  color: black;
+  box-shadow: 4px 4px 0px 0px #000000;
+  cursor: pointer;
+  outline: none;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* Space between text and arrow */
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: "Inter", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.format-select:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px 0px #000000;
+}
+
+.format-select:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0px 0px #000000;
+}
+
+.select-arrow {
+  position: static; /* Reset absolute positioning */
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.5px;
+}
+
+.relative {
+  position: relative;
+  height: 48px;
+}
+
+.premium-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background-color: #facc15; /* yellow-400 */
+  color: black;
+  font-size: 0.75rem; /* text-xs */
+  padding: 0 4px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+/* Status Area */
+.status-area {
+  margin-top: 8px;
+  padding: 8px;
+  background-color: #f3f4f6;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.status-text {
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.hidden {
+  display: none;
+}
+
+#supported-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* New Platform Grid Styles */
+.platform-grid-new {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.platform-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.platform-link {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  background-color: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem; /* text-sm */
+  font-weight: 700; /* Bold */
+  color: #000000;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    "Helvetica", "Arial", sans-serif;
+  outline: none;
+}
+
+.platform-link:hover {
+  background-color: #f9fafb;
+  text-decoration: underline;
+}
+
+.platform-icon-sm {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  transition: transform 0.2s;
+}
+
+.platform-group:hover .platform-icon-sm {
+  transform: scale(1.1);
+}
+
+/* Typography refinements for the intro text */
+.description {
+  font-size: 1rem; /* text-base */
+  color: #6b7280; /* text-gray-600 */
+  line-height: 1.5;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    "Helvetica", "Arial", sans-serif;
+}
+
+.supported-label {
+  font-size: 1rem; /* text-base */
+  font-weight: 500; /* Medium weight */
+  color: #000000;
+}

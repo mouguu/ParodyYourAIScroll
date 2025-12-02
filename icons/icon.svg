@@ -1,0 +1,36 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .bold-text {
+      /* 将字体改小，防止溢出 */
+      font-family: 'Arial Black', 'Helvetica Neue', sans-serif;
+      font-weight: 900;
+      font-size: 24px; 
+      fill: black;
+      text-anchor: middle; /* 保持居中对齐 */
+    }
+  </style>
+
+  <rect x="35" y="35" width="460" height="460" fill="#ECD553" stroke="black" stroke-width="6"/>
+
+  <rect x="10" y="10" width="460" height="460" fill="#FFECCF" stroke="black" stroke-width="6"/>
+
+  <path d="M 145 105 
+           Q 160 195 235 195 
+           Q 160 195 145 285 
+           Q 130 195 55 195 
+           Q 130 195 145 105 Z" 
+        fill="black" />
+
+  <path d="M 320 115 
+           L 355 115 
+           L 355 205 
+           L 400 205 
+           L 337.5 275 
+           L 275 205 
+           L 320 205 
+           Z" 
+        fill="#5465FF" />
+
+  <text x="240" y="370" class="bold-text">Manage your ai chat history</text>
+  
+</svg>
