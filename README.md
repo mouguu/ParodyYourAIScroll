@@ -4,6 +4,17 @@
 
 A Chrome extension to export AI conversations from Google AI Studio and ChatGPT.
 
+## Inspiration & Motivation
+
+Inspired by [YourAIScroll](https://www.youraiscroll.com/).
+
+I created this "parody" version because I found the original tool's support for **Google AI Studio** to be unstable. specifically:
+
+- The scrolling and scraping functionality often fails with **long context** conversations due to complex DOM manipulations.
+- Some essential features are locked behind a paywall.
+
+**ParodyYourAIScroll** is designed to be a free, robust alternative that handles long context exports reliably.
+
 ## Features
 
 - ✅ Export conversations from Google AI Studio
