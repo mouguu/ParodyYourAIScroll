@@ -179,18 +179,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             }
           });
 
-          // 3. Extract Videos (ms-video-chunk)
+          // 3. Extract Videos (ms-video-chunk) - Enhanced extraction
           const videos = turn.querySelectorAll("ms-video-chunk");
-          if (videos.length > 0) console.log(`Found ${videos.length} videos in turn ${index}`);
+          if (videos.length > 0) {
+            console.log(`Found ${videos.length} videos in turn ${index}`);
+          }
           
-          videos.forEach(chunk => {
+          videos.forEach((chunk, videoIdx) => {
             const video = chunk.querySelector("video");
             const nameSpan = chunk.querySelector(".file-chunk-container .name");
             
             if (video && video.src) {
-              const filename = nameSpan ? nameSpan.textContent.trim() : "video.mp4";
-              console.log('Video src:', video.src);
+              let filename = nameSpan ? nameSpan.textContent.trim() : `video_${videoIdx}.mp4`;
+              // Clean filename to avoid issues
+              filename = filename.replace(/[<>:"/\\|?*]/g, '_');
+              
+              console.log(`Video ${videoIdx}: ${filename} -> ${video.src}`);
               textParts.push(`[${filename}](${video.src})`);
+            } else {
+              console.warn(`Video ${videoIdx} has no valid src`);
             }
           });
 
@@ -443,6 +450,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let completedCount = 0;
     const urls = Array.from(resourceMap.keys());
     
+    console.log(`[${config.type}] Processing ${urls.length} resources...`);
+    
     const promises = urls.map(async (url, index) => {
       try {
         const response = await fetch(url);
@@ -452,12 +461,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
         const blob = await response.blob();
         
+        // Validate blob size
+        if (blob.size === 0) {
+          console.error(`Downloaded empty blob for ${url}`);
+          return;
+        }
+        if (blob.size < 100 && config.type === 'image') {
+          console.warn(`Suspicious small ${config.type} (${blob.size} bytes): ${url}`);
+        }
+        
         // Determine filename
         const info = resourceMap.get(url);
         let filename = info.filenameHint;
         
         // If filename is missing or invalid, generate one
-        if (!filename || filename.length > 50 || /[^a-zA-Z0-9._-]/.test(filename)) {
+        if (!filename || filename.length > 50 || /[^a-zA-Z0-9._\- ()]/.test(filename)) {
            const ext = getExtensionFromMime(blob.type);
            // If it's an HTML file but we expected an image, skip it (likely a mistake)
            if (config.type === 'image' && ext === 'html') {
@@ -472,13 +490,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
            }
         }
         
-        // Clean filename
-        filename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+        // Clean filename (remove invalid characters)
+        filename = filename.replace(/[<>:"/\\|?*]/g, '_');
+        
+        console.log(`[${config.type}] Packaged: ${filename} (${blob.size} bytes, ${blob.type})`);
         
         zipFolder.file(filename, blob);
         urlToPathMap.set(url, `${config.subDir}/${filename}`);
       } catch (e) {
-        console.warn(`${config.subDir} download failed:`, url, e);
+        console.error(`[${config.type}] Download failed for ${url}:`, e);
       }
       
       completedCount++;
@@ -486,6 +506,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
     
     await Promise.all(promises);
+    console.log(`[${config.type}] Successfully packaged ${urlToPathMap.size}/${urls.length} resources`);
     return urlToPathMap;
   }
 

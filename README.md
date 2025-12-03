@@ -22,6 +22,22 @@ I created this "parody" version because I found the original tool's support for 
 - ✅ Support for Markdown and JSON formats
 - ✅ Clean, modern UI with Inter font
 - ✅ Auto-scroll to capture full conversation history
+- 🚀 **Smart ZIP Package Export** - Download conversations with all embedded media (images, videos) automatically packaged!
+
+### 🎯 Smart ZIP Package Export
+
+One of the most powerful features of ParodyYourAIScroll is the **intelligent ZIP packaging system**. Unlike other export tools that only save text, this extension:
+
+- **Automatically detects and downloads** all images and videos from your conversation
+- **Preserves original filenames** for easy identification
+- **Rewrites Markdown links** to point to local files in the ZIP archive
+- **Handles large files** through chunked transfer mechanism (bypassing Chrome's message size limits)
+- **Works with Blob URLs** - even temporary media URLs are captured and saved
+
+Perfect for archiving visual conversations, preserving tutorials with screenshots, or backing up important discussions with multimedia content.
+
+![ZIP Package Preview](assets/preview2.png)
+_Example: Exported ZIP containing chat history + all embedded images and videos_
 
 ## Installation
 
