@@ -171,10 +171,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (message.action === "UPDATE_STATUS") {
       updateStatus(message.message || message.status, message.type || "info");
     } else if (message.action === "SCRAPE_COMPLETE") {
-      // For ZIP format, download is handled in content.js
-      if (message.format === 'zip') {
-        updateStatus("✓ ZIP package exported!", "success");
-        setTimeout(() => statusArea.classList.add("hidden"), 3000);
+      // For ZIP or direct HTML downloads, just show success message
+      if (message.format === 'zip' || message.directDownload) {
+        updateStatus('Download started!', 'success');
+        setTimeout(() => statusArea.classList.add('hidden'), 3000);
         return;
       }
       
@@ -203,7 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
             .toISOString()
             .slice(0, 19)
             .replace(/[:T]/g, "-")}.${
-            message.format === "json" ? "json" : message.format === "text" ? "txt" : "md"
+            message.format === "json" ? "json" : message.format === "text" ? "txt" : message.format === "html" ? "html" : "md"
           }`;
           document.body.appendChild(a);
           a.click();

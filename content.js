@@ -143,6 +143,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           userText: null,
           thoughtText: null,
           responseText: null,
+          codeBlocks: [],
+          images: [], // Store base64 images
+          videos: []  // Store base64 videos
         });
         newlyFound = true;
       }
@@ -152,10 +155,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       if (turnContainer.classList.contains("user")) {
         info.type = "user";
+        
+        // 1. Extract Text (only if not yet extracted)
         if (!info.userText) {
           let textParts = [];
-
-          // 1. Extract Text
           const raw = turn.querySelector("ms-text-chunk .very-large-text-container");
           if (raw) {
             textParts.push(raw.textContent.trim());
@@ -163,52 +166,100 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             const node = turn.querySelector(".turn-content ms-cmark-node");
             if (node) textParts.push(node.innerText.trim());
           }
-
-          // 2. Extract Images (ms-image-chunk)
-          // Relaxed selector: removed .loaded-image class requirement
-          const images = turn.querySelectorAll("ms-image-chunk img");
-          if (images.length > 0) console.log(`Found ${images.length} images in turn ${index}`);
-          
-          images.forEach(img => {
-            const src = img.src;
-            const alt = img.alt || "image";
-            if (src) {
-              // Ensure we capture the blob URL correctly
-              console.log('Image src:', src);
-              textParts.push(`![${alt}](${src})`);
-            }
-          });
-
-          // 3. Extract Videos (ms-video-chunk) - Enhanced extraction
-          const videos = turn.querySelectorAll("ms-video-chunk");
-          if (videos.length > 0) {
-            console.log(`Found ${videos.length} videos in turn ${index}`);
-          }
-          
-          videos.forEach((chunk, videoIdx) => {
-            const video = chunk.querySelector("video");
-            const nameSpan = chunk.querySelector(".file-chunk-container .name");
-            
-            if (video && video.src) {
-              let filename = nameSpan ? nameSpan.textContent.trim() : `video_${videoIdx}.mp4`;
-              // Clean filename to avoid issues
-              filename = filename.replace(/[<>:"/\\|?*]/g, '_');
-              
-              console.log(`Video ${videoIdx}: ${filename} -> ${video.src}`);
-              textParts.push(`[${filename}](${video.src})`);
-            } else {
-              console.warn(`Video ${videoIdx} has no valid src`);
-            }
-          });
-
           if (textParts.length > 0) {
             info.userText = textParts.join("\n\n");
             updated = true;
           }
         }
+
+        // 2. Extract Images (Always check, as they might lazy load)
+        const images = turn.querySelectorAll("ms-image-chunk img");
+        if (images.length > 0) {
+            // Initialize collected URLs set if not exists
+            if (!info.collectedImageUrls) info.collectedImageUrls = new Set();
+            
+            for (const img of images) {
+                const src = img.src;
+                const alt = img.alt || "image";
+                
+                // Skip if already collected
+                if (src && !info.collectedImageUrls.has(src)) {
+                    console.log('Found new image:', src);
+                    info.collectedImageUrls.add(src);
+                    
+                    try {
+                        const base64 = await fetchAsBase64(src);
+                        if (base64) {
+                            info.images.push({ alt, base64 });
+                            updated = true;
+                            // Also append to text for markdown if it's not already there
+                            if (info.userText && !info.userText.includes(src)) {
+                                info.userText += `\n\n![${alt}](${src})`;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Failed to convert image to base64:', e);
+                    }
+                }
+            }
+        }
+
+        // 3. Extract Videos (Always check)
+        const videos = turn.querySelectorAll("ms-video-chunk");
+        console.log(`[Turn ${index}] Found ${videos.length} video chunks`);
+        
+        if (videos.length > 0) {
+            if (!info.collectedVideoUrls) info.collectedVideoUrls = new Set();
+            
+            for (const [videoIdx, chunk] of videos.entries()) {
+                const video = chunk.querySelector("video");
+                const nameSpan = chunk.querySelector(".file-chunk-container .name");
+                
+                console.log(`[Turn ${index}] Video ${videoIdx}: video element=${!!video}, src=${video?.src?.substring(0, 50)}, name element=${!!nameSpan}`);
+                
+                if (video && video.src && !info.collectedVideoUrls.has(video.src)) {
+                    let filename = nameSpan ? nameSpan.textContent.trim() : `video_${videoIdx}.mp4`;
+                    filename = filename.replace(/[<>:"/\\|?*]/g, '_');
+                    
+                    console.log(`[Turn ${index}] 🎬 Attempting to fetch video: ${filename}`);
+                    info.collectedVideoUrls.add(video.src);
+                    
+                    try {
+                        const base64 = await fetchAsBase64(video.src);
+                        if (base64) {
+                            info.videos.push({ filename, base64 });
+                            updated = true;
+                            console.log(`[Turn ${index}] ✓ Video successfully added to export`);
+                            if (info.userText && !info.userText.includes(video.src)) {
+                                info.userText += `\n\n[${filename}](${video.src})`;
+                            }
+                        } else {
+                            console.error(`[Turn ${index}] ✗ fetchAsBase64 returned null for video: ${filename}`);
+                        }
+                    } catch (e) {
+                        console.error(`[Turn ${index}] ✗ Error processing video ${videoIdx}:`, e);
+                    }
+                } else if (!video) {
+                    console.warn(`[Turn ${index}] Video chunk ${videoIdx} has no video element`);
+                } else if (!video.src) {
+                    console.warn(`[Turn ${index}] Video ${videoIdx} has no src`);
+                } else {
+                    console.log(`[Turn ${index}] Video ${videoIdx} already collected (duplicate)`);
+                }
+            }
+        }
       } else if (turnContainer.classList.contains("model")) {
         info.type = "model";
         await expandThinkingSections(turn);
+
+        // Smart Code Block Extraction
+        const codeBlocks = turn.querySelectorAll("code-block, pre code");
+        codeBlocks.forEach(block => {
+            const lang = block.getAttribute('language') || block.className.replace('language-', '') || '';
+            const code = block.textContent;
+            // We don't replace the text here, but we could use this metadata for smarter formatting later
+            // For now, we rely on the markdown extraction which usually captures code blocks
+        });
 
         // Thought
         if (!info.thoughtText) {
@@ -238,7 +289,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               );
               if (raw) return raw.textContent.trim();
               const cmark = chunk.querySelector("ms-cmark-node");
-              if (cmark) return cmark.innerText.trim();
+              if (cmark) {
+                  // Try to preserve code block language info if possible
+                  // This is a simple text extraction, for full fidelity we might need HTML parsing
+                  return cmark.innerText.trim();
+              }
               return chunk.innerText.trim();
             })
             .filter((t) => t);
@@ -355,13 +410,31 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return JSON.stringify(sorted, null, 2);
     }
 
-    let md = "Google AI Studio Chat Export\n============================\n\n";
+    if (format === "html") {
+      return generateHTML(sorted);
+    }
+
+    // Markdown with YAML Frontmatter
+    const date = new Date().toISOString().split('T')[0];
+    const title = document.title || "AI Chat Export";
+    let md = `---
+title: "${title}"
+date: ${date}
+source: "Google AI Studio"
+model: "Gemini"
+tags: [AI, Chat, Export]
+---
+
+# ${title}
+
+`;
+
     sorted.forEach((item) => {
       if (item.type === "user" && item.userText) {
         md += `**User**:\n${item.userText}\n\n`;
       } else if (item.type === "model") {
         if (item.thoughtText) {
-          md += `*Thinking*:\n${item.thoughtText}\n\n`;
+          md += `> **Thinking**:\n> ${item.thoughtText.replace(/\n/g, '\n> ')}\n\n`;
         }
         if (item.responseText) {
           md += `**Model**:\n${item.responseText}\n\n`;
@@ -370,6 +443,233 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       md += "---\n\n";
     });
     return md;
+  }
+
+  // Helper to fetch resource as base64 with timeout and retry
+  async function fetchAsBase64(url, retries = 2) {
+    const MAX_SIZE_MB = 100; // Skip files larger than 100MB to avoid memory issues
+    const TIMEOUT_MS = 30000; // 30 second timeout
+    
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        console.log(`[Fetch] Attempt ${attempt + 1}/${retries + 1} for:`, url.substring(0, 100));
+        
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+        
+        try {
+          // Blob URLs must be fetched in the same context (content script), not background
+          const response = await fetch(url, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            console.warn(`[Fetch] HTTP ${response.status} for ${url.substring(0, 100)}`);
+            if (attempt < retries) {
+              await delay(1000 * (attempt + 1)); // Progressive delay
+              continue;
+            }
+            return null;
+          }
+          
+          // Check size before downloading
+          const contentLength = response.headers.get('content-length');
+          if (contentLength) {
+            const sizeMB = parseInt(contentLength) / (1024 * 1024);
+            if (sizeMB > MAX_SIZE_MB) {
+              console.warn(`[Fetch] File too large (${sizeMB.toFixed(2)}MB), skipping:`, url.substring(0, 100));
+              return null;
+            }
+            console.log(`[Fetch] Downloading ${sizeMB.toFixed(2)}MB...`);
+          }
+          
+          const blob = await response.blob();
+          const actualSizeMB = blob.size / (1024 * 1024);
+          console.log(`[Fetch] Downloaded ${actualSizeMB.toFixed(2)}MB, converting to base64...`);
+          
+          // Convert blob to base64 using FileReader
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              console.log(`[Fetch] ✓ Successfully converted to base64`);
+              resolve(reader.result); // This is already a data: URL
+            };
+            reader.onerror = () => {
+              console.error('[Fetch] ✗ FileReader error for:', url.substring(0, 100));
+              resolve(null);
+            };
+            reader.readAsDataURL(blob);
+          });
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          throw fetchError;
+        }
+      } catch (error) {
+        const isTimeout = error.name === 'AbortError';
+        console.warn(`[Fetch] ${isTimeout ? 'Timeout' : 'Error'} (attempt ${attempt + 1}):`, error.message);
+        
+        if (attempt < retries && !isTimeout) {
+          await delay(1000 * (attempt + 1));
+          continue;
+        }
+        
+        // Final failure
+        console.error(`[Fetch] ✗ Failed after ${attempt + 1} attempts:`, url.substring(0, 100));
+        return null;
+      }
+    }
+    
+    return null;
+  }
+
+  // HTML Generation with embedded media
+
+
+  async function generateHTML(sortedData) {
+    const title = document.title || "AI Chat Export";
+    const date = new Date().toLocaleString();
+    
+    let content = '';
+
+    for (const item of sortedData) {
+      console.log('Processing item:', item.type, '| Has images:', item.images?.length || 0, '| Has videos:', item.videos?.length || 0);
+      
+      // Outer turn wrapper
+      content += `<div class="turn">`;
+      content += `<div class="role-label">${item.type === 'user' ? 'User' : 'Model'}</div>`;
+      
+      if (item.type === 'user') {
+          // User card with glass effect
+          content += `<div class="user-card">`;
+          
+          // Add text content
+          if (item.userText) {
+              const textOnly = item.userText.split(/!\[|\[/).filter((part, idx) => idx === 0)[0];
+              if (textOnly.trim()) {
+                  content += escapeHtml(textOnly);
+              }
+          }
+          
+          // Add images from stored base64
+          if (item.images && item.images.length > 0) {
+              console.log('Adding', item.images.length, 'images to HTML');
+              content += '<div class="media-container">';
+              item.images.forEach(img => {
+                  content += `<img src="${img.base64}" alt="${escapeHtml(img.alt)}">`;
+              });
+              content += '</div>';
+          }
+          
+          // Add videos from stored base64
+          if (item.videos && item.videos.length > 0) {
+              content += '<div class="media-container">';
+              item.videos.forEach(vid => {
+                  content += `<video controls><source src="${vid.base64}" type="video/mp4">Your browser does not support video.</video>`;
+              });
+              content += '</div>';
+          }
+          
+          content += `</div>`; // Close user-card
+          
+      } else if (item.type === 'model') {
+          // Model card with IDE look
+          content += `<div class="model-card">`;
+          
+          // macOS-style window header
+          content += `<div class="model-header">`;
+          content += `<div class="dot red"></div>`;
+          content += `<div class="dot yellow"></div>`;
+          content += `<div class="dot green"></div>`;
+          content += `</div>`;
+          
+          // Model content
+          content += `<div class="model-content">`;
+          
+          // Thinking section (if exists)
+          if (item.thoughtText) {
+              content += `<div class="thinking">`;
+              content += `<div class="thinking-header" onclick="toggleThinking(this)">`;
+              content += `<div class="thinking-title">Thinking</div>`;
+              content += `<span class="arrow">↓</span>`;
+              content += `</div>`;
+              content += `<div class="thinking-content">`;
+              content += escapeHtml(item.thoughtText);
+              content += `</div>`;
+              content += `</div>`;
+          }
+          
+          // Response text
+          if (item.responseText) {
+              let textContent = item.responseText;
+              // Simple markdown parsing for code blocks
+              textContent = textContent.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+                  return `<pre><code class="language-${lang || 'text'}">${escapeHtml(code)}</code></pre>`;
+              });
+              // Bold
+              textContent = textContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+              // Italic
+              textContent = textContent.replace(/\*(.*?)\*/g, '<em>$1</em>');
+              
+              content += textContent;
+          }
+          
+          content += `</div>`; // Close model-content
+          content += `</div>`; // Close model-card
+      }
+      
+      content += `</div>`; // Close turn
+    }
+
+    // Ensure getHTMLTemplate is available
+    const templateFn = typeof getHTMLTemplate === 'function' ? getHTMLTemplate : window.getHTMLTemplate;
+    
+    if (typeof templateFn !== 'function') {
+        throw new Error("getHTMLTemplate function is not defined. Please reload the extension.");
+    }
+
+    return templateFn(title, date, content);
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  async function embedImages(html) {
+      const imgRegex = /<img[^>]+src="([^">]+)"/g;
+      let match;
+      let newHtml = html;
+      const matches = [];
+      
+      while ((match = imgRegex.exec(html)) !== null) {
+          matches.push({ full: match[0], url: match[1] });
+      }
+
+      for (const m of matches) {
+          try {
+              if (m.url.startsWith('data:')) continue;
+              
+              // Use background script to fetch image (CORS bypass)
+              const base64Data = await new Promise((resolve) => {
+                  chrome.runtime.sendMessage({ action: "FETCH_RESOURCE", url: m.url }, (response) => {
+                      if (response && response.success) {
+                          resolve(response.data);
+                      } else {
+                          console.warn('Failed to fetch image for embedding:', m.url, response?.error);
+                          resolve(null);
+                      }
+                  });
+              });
+
+              if (base64Data) {
+                  newHtml = newHtml.replace(m.url, base64Data);
+              }
+          } catch (e) {
+              console.error('Error embedding image:', e);
+          }
+      }
+      return newHtml;
   }
 
   // ==========================================
@@ -454,12 +754,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     
     const promises = urls.map(async (url, index) => {
       try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          console.warn(`HTTP ${response.status} for ${url}`);
-          return;
-        }
-        const blob = await response.blob();
+        // Use background script for fetching to bypass CORS
+        const blob = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({ action: "FETCH_RESOURCE", url: url }, (response) => {
+                if (response && response.success) {
+                    fetch(response.data).then(res => res.blob()).then(resolve).catch(reject);
+                } else {
+                    // Fallback to direct fetch if background fails (though background is preferred for CORS)
+                    fetch(url).then(res => {
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        return res.blob();
+                    }).then(resolve).catch(reject);
+                }
+            });
+        });
+
+        // Validate blob size
         
         // Validate blob size
         if (blob.size === 0) {
@@ -777,7 +1087,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             // The original extractDataIncremental returns a boolean, not markdown.
             // We need to call formatData after extraction for AI Studio.
             await extractDataIncremental(); // Populate collectedData
-            markdown = formatData(request.format || "markdown"); // Then format it
+            markdown = await formatData(request.format || "markdown"); // Then format it (await for HTML)
           } else if (
             url.includes("chatgpt.com") ||
             url.includes("chat.openai.com")
@@ -806,8 +1116,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               action: "SCRAPE_COMPLETE",
               format: 'zip'
             });
+          } else if (request.format === 'html') {
+            // For HTML, download directly here to avoid message size limits
+            const blob = new Blob([markdown], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `export_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.html`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            chrome.runtime.sendMessage({
+              action: "SCRAPE_COMPLETE",
+              format: 'html',
+              directDownload: true
+            });
           } else {
-            // For other formats, send data back to popup
+            // For other formats (markdown, json), send data back to popup
             chrome.runtime.sendMessage({
               action: "SCRAPE_COMPLETE",
               data: markdown,
