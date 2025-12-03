@@ -159,16 +159,26 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         // 1. Extract Text (only if not yet extracted)
         if (!info.userText) {
           let textParts = [];
+          
+          // Strategy 1: Raw Text Container (Often most reliable for user input)
           const raw = turn.querySelector("ms-text-chunk .very-large-text-container");
           if (raw) {
             textParts.push(raw.textContent.trim());
           } else {
-            const node = turn.querySelector(".turn-content ms-cmark-node");
+            // Strategy 2: Rendered Markdown Node
+            const node = turn.querySelector("ms-cmark-node");
             if (node) textParts.push(node.innerText.trim());
+            else {
+                // Strategy 3: Fallback to any text content in the turn
+                const content = turn.querySelector(".turn-content");
+                if (content) textParts.push(content.innerText.trim());
+            }
           }
+          
           if (textParts.length > 0) {
             info.userText = textParts.join("\n\n");
             updated = true;
+            console.log(`[Turn ${index}] Extracted User text: ${info.userText.substring(0, 30)}...`);
           }
         }
 
@@ -206,7 +216,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
         // 3. Extract Videos (Always check)
         const videos = turn.querySelectorAll("ms-video-chunk");
-        console.log(`[Turn ${index}] Found ${videos.length} video chunks`);
         
         if (videos.length > 0) {
             if (!info.collectedVideoUrls) info.collectedVideoUrls = new Set();
@@ -215,13 +224,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 const video = chunk.querySelector("video");
                 const nameSpan = chunk.querySelector(".file-chunk-container .name");
                 
-                console.log(`[Turn ${index}] Video ${videoIdx}: video element=${!!video}, src=${video?.src?.substring(0, 50)}, name element=${!!nameSpan}`);
-                
                 if (video && video.src && !info.collectedVideoUrls.has(video.src)) {
                     let filename = nameSpan ? nameSpan.textContent.trim() : `video_${videoIdx}.mp4`;
                     filename = filename.replace(/[<>:"/\\|?*]/g, '_');
                     
-                    console.log(`[Turn ${index}] 🎬 Attempting to fetch video: ${filename}`);
                     info.collectedVideoUrls.add(video.src);
                     
                     try {
@@ -229,37 +235,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                         if (base64) {
                             info.videos.push({ filename, base64 });
                             updated = true;
-                            console.log(`[Turn ${index}] ✓ Video successfully added to export`);
                             if (info.userText && !info.userText.includes(video.src)) {
                                 info.userText += `\n\n[${filename}](${video.src})`;
                             }
-                        } else {
-                            console.error(`[Turn ${index}] ✗ fetchAsBase64 returned null for video: ${filename}`);
                         }
                     } catch (e) {
                         console.error(`[Turn ${index}] ✗ Error processing video ${videoIdx}:`, e);
                     }
-                } else if (!video) {
-                    console.warn(`[Turn ${index}] Video chunk ${videoIdx} has no video element`);
-                } else if (!video.src) {
-                    console.warn(`[Turn ${index}] Video ${videoIdx} has no src`);
-                } else {
-                    console.log(`[Turn ${index}] Video ${videoIdx} already collected (duplicate)`);
                 }
             }
         }
       } else if (turnContainer.classList.contains("model")) {
         info.type = "model";
         await expandThinkingSections(turn);
-
-        // Smart Code Block Extraction
-        const codeBlocks = turn.querySelectorAll("code-block, pre code");
-        codeBlocks.forEach(block => {
-            const lang = block.getAttribute('language') || block.className.replace('language-', '') || '';
-            const code = block.textContent;
-            // We don't replace the text here, but we could use this metadata for smarter formatting later
-            // For now, we rely on the markdown extraction which usually captures code blocks
-        });
 
         // Thought
         if (!info.thoughtText) {
@@ -278,35 +266,48 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
         // Response
         if (!info.responseText) {
+          // Strategy 1: Find all prompt chunks that are NOT thoughts
           const responseChunks = Array.from(
             turn.querySelectorAll(".turn-content > ms-prompt-chunk")
           );
-          const texts = responseChunks
-            .filter((chunk) => !chunk.querySelector("ms-thought-chunk"))
-            .map((chunk) => {
-              const raw = chunk.querySelector(
-                "ms-text-chunk .very-large-text-container"
-              );
-              if (raw) return raw.textContent.trim();
-              const cmark = chunk.querySelector("ms-cmark-node");
-              if (cmark) {
-                  // Try to preserve code block language info if possible
-                  // This is a simple text extraction, for full fidelity we might need HTML parsing
-                  return cmark.innerText.trim();
+          
+          let texts = [];
+          
+          if (responseChunks.length > 0) {
+              texts = responseChunks
+                .filter((chunk) => !chunk.querySelector("ms-thought-chunk"))
+                .map((chunk) => {
+                  // Sub-Strategy A: Rendered Markdown (Best for formatting)
+                  const cmark = chunk.querySelector("ms-cmark-node");
+                  if (cmark) return cmark.innerText.trim();
+                  
+                  // Sub-Strategy B: Raw Text
+                  const raw = chunk.querySelector("ms-text-chunk .very-large-text-container");
+                  if (raw) return raw.textContent.trim();
+                  
+                  // Sub-Strategy C: Chunk Text
+                  return chunk.innerText.trim();
+                })
+                .filter((t) => t);
+          } else {
+              // Strategy 2: If no prompt chunks found (rare, but possible if DOM changed), look for cmark nodes directly in turn content
+              const directCmarks = turn.querySelectorAll(".turn-content > ms-cmark-node");
+              if (directCmarks.length > 0) {
+                  texts = Array.from(directCmarks).map(n => n.innerText.trim());
               }
-              return chunk.innerText.trim();
-            })
-            .filter((t) => t);
+          }
 
           if (texts.length > 0) {
             info.responseText = texts.join("\n\n");
             updated = true;
+            console.log(`[Turn ${index}] Extracted Model text: ${info.responseText.substring(0, 30)}...`);
           } else if (!info.thoughtText) {
-            // Fallback
+            // Strategy 3: Ultimate Fallback
             const content = turn.querySelector(".turn-content");
             if (content) {
               info.responseText = content.innerText.trim();
               updated = true;
+              console.log(`[Turn ${index}] Extracted Model text (Fallback): ${info.responseText.substring(0, 30)}...`);
             }
           }
         }
