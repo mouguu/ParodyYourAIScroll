@@ -39,6 +39,19 @@ Perfect for archiving visual conversations, preserving tutorials with screenshot
 ![ZIP Package Preview](assets/preview2.png)
 _Example: Exported ZIP containing chat history + all embedded images and videos_
 
+### 🎨 Beautiful HTML Export
+
+Export your conversations as **self-contained HTML files** with a gorgeous Cursor-inspired design:
+
+- **Dark IDE aesthetic** - Model responses styled like a code editor window
+- **Glass-morphism effects** - Modern, premium UI with subtle transparency
+- **Embedded media** - All images and videos are converted to base64 and embedded directly
+- **Offline-ready** - No external dependencies, works without internet
+- **Expandable thinking blocks** - Click to reveal AI's reasoning process
+
+![HTML Export Preview](assets/Preview3.png)
+_Example: Exported HTML with rich media, beautiful typography, and dark theme_
+
 ## Installation
 
 1. Download this repository
