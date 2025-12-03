@@ -44,3 +44,65 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
     }
   });
 });
+
+// Handle download requests from content script
+// Chunked download storage
+let downloadChunks = {};
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "DOWNLOAD_BLOB") {
+    // Legacy single-message handler (keep for small files if needed, or remove)
+    chrome.downloads.download({
+      url: request.url,
+      filename: request.filename,
+      saveAs: true
+    }, (downloadId) => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ success: true, downloadId: downloadId });
+      }
+    });
+    return true; // Keep channel open
+  }
+  
+  if (request.action === "DOWNLOAD_CHUNK") {
+    const { fileId, chunk, index, total } = request;
+    if (!downloadChunks[fileId]) {
+      downloadChunks[fileId] = new Array(total);
+    }
+    downloadChunks[fileId][index] = chunk;
+    sendResponse({ success: true });
+    return false;
+  }
+  
+  if (request.action === "DOWNLOAD_FINISH") {
+    const { fileId, filename } = request;
+    const chunks = downloadChunks[fileId];
+    
+    if (!chunks || chunks.some(c => !c)) {
+      sendResponse({ success: false, error: "Missing chunks" });
+      delete downloadChunks[fileId];
+      return false;
+    }
+    
+    // Reassemble Base64 string
+    const base64Data = chunks.join('');
+    
+    chrome.downloads.download({
+      url: base64Data,
+      filename: filename,
+      saveAs: true
+    }, (downloadId) => {
+      // Cleanup
+      delete downloadChunks[fileId];
+      
+      if (chrome.runtime.lastError) {
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ success: true, downloadId: downloadId });
+      }
+    });
+    return true;
+  }
+});

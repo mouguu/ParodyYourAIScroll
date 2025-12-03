@@ -111,6 +111,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await sendMessageToContentScript("START_SCRAPE", {
         download: true,
         format,
+        mode: format === 'zip' ? 'full' : 'text' // ZIP uses full packaging mode
       });
       if (response && response.status === "started") {
         // The content script will send progress updates
@@ -168,8 +169,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // Listen for messages from content script
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "UPDATE_STATUS") {
-      updateStatus(message.status, "info"); // Fixed: message.status instead of message.message
+      updateStatus(message.message || message.status, message.type || "info");
     } else if (message.action === "SCRAPE_COMPLETE") {
+      // For ZIP format, download is handled in content.js
+      if (message.format === 'zip') {
+        updateStatus("✓ ZIP package exported!", "success");
+        setTimeout(() => statusArea.classList.add("hidden"), 3000);
+        return;
+      }
+      
+      // For other formats, handle download in popup
       updateStatus("Scraping complete!", "success");
       if (message.data) {
         if (message.copyToClipboard) {
@@ -194,7 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
             .toISOString()
             .slice(0, 19)
             .replace(/[:T]/g, "-")}.${
-            message.format === "json" ? "json" : "md"
+            message.format === "json" ? "json" : message.format === "text" ? "txt" : "md"
           }`;
           document.body.appendChild(a);
           a.click();

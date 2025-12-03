@@ -3,7 +3,7 @@
   "name": "ParodyYourAIScroll",
   "version": "1.0",
   "description": "Export Google AI Studio conversations to Markdown.",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "downloads"],
   "host_permissions": [
     "https://aistudio.google.com/*",
     "https://chatgpt.com/*",
