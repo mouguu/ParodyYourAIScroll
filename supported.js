@@ -11,6 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const url = tabs[0].url;
     const isAIStudio = url && url.includes("aistudio.google.com");
     const isChatGPT = url && (url.includes("chatgpt.com") || url.includes("chat.openai.com"));
+    const isGemini = url && url.includes("gemini.google.com");
 
     const pageTitle = document.querySelector(".page-title");
     const urlText = document.querySelector(".url-text");
@@ -24,6 +25,10 @@ document.addEventListener("DOMContentLoaded", () => {
       pageTitle.textContent = "ChatGPT - Conversation";
       urlText.textContent = "https://chatgpt.com";
       urlIcon.src = "https://chatgpt.com/favicon.ico";
+    } else if (isGemini) {
+      pageTitle.textContent = "Gemini - Chat";
+      urlText.textContent = "https://gemini.google.com";
+      urlIcon.src = "https://www.gstatic.com/lamda/images/gemini_favicon_f069958c85030456e93de685481c559f160ea06b.png";
     }
   });
 
@@ -95,7 +100,20 @@ document.addEventListener("DOMContentLoaded", () => {
   copyBtn.addEventListener("click", async () => {
     updateStatus("Scraping chat...");
     try {
-      const response = await sendMessageToContentScript("START_SCRAPE");
+      // Check if we're on Gemini
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const isGemini = tabs[0]?.url?.includes("gemini.google.com");
+      
+      if (isGemini) {
+        // Set mode to 'copy' for Gemini
+        await chrome.tabs.sendMessage(tabs[0].id, {
+          action: "SET_EXPORT_MODE",
+          mode: "copy"
+        });
+      }
+      
+      const action = isGemini ? "START_SCRAPE_GEMINI" : "START_SCRAPE";
+      const response = await sendMessageToContentScript(action);
       if (response && response.status === "started") {
         // The content script will send progress updates via runtime.onMessage
       }
@@ -108,7 +126,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const format = document.getElementById("download-format").value;
     updateStatus(`Preparing ${format.toUpperCase()} download...`);
     try {
-      const response = await sendMessageToContentScript("START_SCRAPE", {
+      // Check if we're on Gemini
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const isGemini = tabs[0]?.url?.includes("gemini.google.com");
+      
+      if (isGemini) {
+        // Set mode to 'download' for Gemini
+        await chrome.tabs.sendMessage(tabs[0].id, {
+          action: "SET_EXPORT_MODE",
+          mode: "download"
+        });
+      }
+      
+      const action = isGemini ? "START_SCRAPE_GEMINI" : "START_SCRAPE";
+      const response = await sendMessageToContentScript(action, {
         download: true,
         format,
         mode: format === 'zip' ? 'full' : 'text' // ZIP uses full packaging mode

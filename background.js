@@ -5,8 +5,9 @@ function updatePopup(tabId, url) {
 
   const isAIStudio = url.includes("aistudio.google.com");
   const isChatGPT = url.includes("chatgpt.com") || url.includes("chat.openai.com");
+  const isGemini = url.includes("gemini.google.com");
 
-  if (isAIStudio || isChatGPT) {
+  if (isAIStudio || isChatGPT || isGemini) {
     chrome.action.setPopup({ tabId: tabId, popup: "supported.html" });
   } else {
     chrome.action.setPopup({ tabId: tabId, popup: "unsupported.html" });

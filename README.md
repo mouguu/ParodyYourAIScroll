@@ -2,7 +2,7 @@
 
 ![Preview](assets/preview.png)
 
-A Chrome extension to export AI conversations from Google AI Studio and ChatGPT.
+A Chrome extension to export AI conversations from Google AI Studio, ChatGPT, and Gemini.
 
 ## Inspiration & Motivation
 
@@ -19,6 +19,7 @@ I created this "parody" version because I found the original tool's support for 
 
 - ✅ Export conversations from Google AI Studio
 - ✅ Export conversations from ChatGPT
+- ✅ Export conversations from Gemini (with Thoughts content)
 - ✅ Support for Markdown and JSON formats
 - ✅ Clean, modern UI with Inter font
 - ✅ Auto-scroll to capture full conversation history
@@ -64,10 +65,11 @@ _Example: Exported HTML with rich media, beautiful typography, and dark theme_
 
 - **Google AI Studio** - https://aistudio.google.com
 - **ChatGPT** - https://chatgpt.com
+- **Gemini** - https://gemini.google.com
 
 ## Usage
 
-1. Navigate to AI Studio or ChatGPT
+1. Navigate to AI Studio, ChatGPT, or Gemini
 2. Click the extension icon
 3. Choose your export format (Markdown or JSON)
 4. Click "Export" to download or copy to clipboard
