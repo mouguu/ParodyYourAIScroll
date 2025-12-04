@@ -29,6 +29,12 @@ document.addEventListener("DOMContentLoaded", () => {
       pageTitle.textContent = "Gemini - Chat";
       urlText.textContent = "https://gemini.google.com";
       urlIcon.src = "https://www.gstatic.com/lamda/images/gemini_favicon_f069958c85030456e93de685481c559f160ea06b.png";
+      
+      // Hide ZIP option for Gemini (no media files to package)
+      const zipOption = document.querySelector('.option-item[data-value="zip"]');
+      if (zipOption) {
+        zipOption.style.display = 'none';
+      }
     }
   });
 

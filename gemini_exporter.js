@@ -127,7 +127,7 @@
     // The original UserScript uses 1000, but we'll use 10000 to be safe
     const innerArgs = JSON.stringify([
       convKey,
-      10000,  // Increased from 1000 to 10000
+      10000, // Increased from 1000 to 10000
       null,
       1,
       [1],
@@ -428,8 +428,10 @@
 
   // New function to extract from Array[5] structure
   function extractFromArray5Structure(item, index) {
-    console.log(`[Gemini Exporter] Trying Array[5] extraction for item ${index}`);
-    
+    console.log(
+      `[Gemini Exporter] Trying Array[5] extraction for item ${index}`
+    );
+
     if (!Array.isArray(item) || item.length !== 5) {
       console.log(`[Gemini Exporter] Not an Array[5], skipping`);
       return null;
@@ -441,8 +443,8 @@
       const assistantPart = item[3]; // Array[22]
       const timestampPart = item[4]; // Array[2]
 
-      let userText = '';
-      let assistantText = '';
+      let userText = "";
+      let assistantText = "";
       let thoughtsText = null;
       let tsPair = null;
 
@@ -456,7 +458,7 @@
       if (Array.isArray(assistantPart)) {
         const found = findTextInNode(assistantPart);
         if (found) assistantText = found;
-        
+
         // Try to find thoughts
         const thoughts = findThoughtsInNode(assistantPart);
         if (thoughts) thoughtsText = thoughts;
@@ -468,12 +470,17 @@
       }
 
       if (userText || assistantText) {
-        console.log(`[Gemini Exporter] ✓ Extracted from Array[5]: user=${userText.substring(0, 30)}..., assistant=${assistantText.substring(0, 30)}...`);
+        console.log(
+          `[Gemini Exporter] ✓ Extracted from Array[5]: user=${userText.substring(
+            0,
+            30
+          )}..., assistant=${assistantText.substring(0, 30)}...`
+        );
         return {
           userText,
           assistantText,
           thoughtsText,
-          tsPair
+          tsPair,
         };
       }
     } catch (e) {
@@ -486,11 +493,11 @@
   // Helper to find text in nested arrays
   function findTextInNode(node, skipIds = true) {
     const texts = [];
-    
+
     function collect(n, depth = 0) {
       if (depth > 15) return; // Prevent infinite recursion
-      
-      if (typeof n === 'string' && n.trim()) {
+
+      if (typeof n === "string" && n.trim()) {
         const trimmed = n.trim();
         // Skip IDs: c_xxx, rc_xxx, r_xxx patterns
         if (skipIds && /^(c_|rc_|r_)[a-f0-9]+$/.test(trimmed)) {
@@ -507,15 +514,15 @@
         }
       }
     }
-    
+
     collect(node);
-    
+
     // Return the longest text found (likely the actual content)
     if (texts.length === 0) return null;
     if (texts.length === 1) return texts[0];
-    
+
     // Return the longest string, as it's most likely the actual message
-    return texts.reduce((longest, current) => 
+    return texts.reduce((longest, current) =>
       current.length > longest.length ? current : longest
     );
   }
@@ -523,13 +530,13 @@
   // Helper to find thoughts/reasoning
   function findThoughtsInNode(node) {
     if (!Array.isArray(node)) return null;
-    
+
     const allTexts = [];
-    
+
     function collect(n, depth = 0) {
       if (depth > 15) return; // Prevent infinite recursion
-      
-      if (typeof n === 'string' && n.trim()) {
+
+      if (typeof n === "string" && n.trim()) {
         const trimmed = n.trim();
         // Skip IDs and collect longer texts
         if (!/^(c_|rc_|r_)[a-f0-9]+$/.test(trimmed) && trimmed.length > 50) {
@@ -542,20 +549,23 @@
         }
       }
     }
-    
+
     collect(node);
-    
+
     // If we found multiple long texts, try to identify which is the thought
     if (allTexts.length > 1) {
       // Sort by length descending
       allTexts.sort((a, b) => b.length - a.length);
       // Return the second longest (first might be main response)
       // Or if they're similar length, return a different one
-      if (allTexts.length >= 2 && allTexts[0].length / allTexts[1].length < 1.5) {
+      if (
+        allTexts.length >= 2 &&
+        allTexts[0].length / allTexts[1].length < 1.5
+      ) {
         return allTexts[1];
       }
     }
-    
+
     return allTexts[0] || null;
   }
 
@@ -565,23 +575,25 @@
 
     function scan(node, depth = 0) {
       if (!Array.isArray(node)) return;
-      
+
       // Debug: Log structure of top-level conversation items
       if (depth === 0) {
-        console.log(`[Gemini Exporter] Scanning node with ${node.length} children`);
+        console.log(
+          `[Gemini Exporter] Scanning node with ${node.length} children`
+        );
         node.forEach((child, idx) => {
           if (Array.isArray(child)) {
             console.log(`  Item ${idx}: Array[${child.length}]`, {
               hasUserNode: child.some(isUserMessageNode),
               hasAssistantContainer: child.some(isAssistantContainer),
-              hasTimestamp: child.some(isTimestampPair)
+              hasTimestamp: child.some(isTimestampPair),
             });
           } else {
             console.log(`  Item ${idx}:`, typeof child, child);
           }
         });
       }
-      
+
       const block = detectBlock(node);
       if (block) {
         const key = JSON.stringify([
@@ -594,24 +606,28 @@
         if (!seenComposite.has(key)) {
           seenComposite.add(key);
           blocks.push(block);
-          console.log(`[Gemini Exporter] ✓ Found block at depth ${depth}, total: ${blocks.length}`);
+          console.log(
+            `[Gemini Exporter] ✓ Found block at depth ${depth}, total: ${blocks.length}`
+          );
         }
       }
-      
+
       // Recursively scan children
       for (const child of node) scan(child, depth + 1);
     }
-    
+
     // The actual conversation data is in root[0], not root itself
     // Based on the structure: payload[0] = Array[9] containing all messages
     // Each message is wrapped in an Array[5] container
     if (Array.isArray(root) && root.length > 0 && Array.isArray(root[0])) {
-      console.log(`[Gemini Exporter] Scanning conversation array at root[0], length: ${root[0].length}`);
-      
+      console.log(
+        `[Gemini Exporter] Scanning conversation array at root[0], length: ${root[0].length}`
+      );
+
       // Try Array[5] extraction first for each item
       root[0].forEach((item, idx) => {
         console.log(`[Gemini Exporter] Processing conversation item ${idx}...`);
-        
+
         // Try the new Array[5] extraction method
         const block = extractFromArray5Structure(item, idx);
         if (block) {
@@ -628,41 +644,57 @@
           }
         } else {
           // Fallback to old method
-          console.log(`[Gemini Exporter] Array[5] extraction failed, trying recursive scan...`);
+          console.log(
+            `[Gemini Exporter] Array[5] extraction failed, trying recursive scan...`
+          );
           scan(item, 0);
         }
       });
     } else {
       // Fallback to scanning entire root if structure is different
-      console.log('[Gemini Exporter] Using fallback: scanning entire root');
+      console.log("[Gemini Exporter] Using fallback: scanning entire root");
       scan(root, 0);
     }
-    
+
     console.log(`[Gemini Exporter] Total blocks extracted: ${blocks.length}`);
     return blocks;
   }
 
   function extractAllBlocks(payloads) {
     let blocks = [];
-    
+
     // Debug: Log payload structure
-    console.log('[Gemini Exporter] Analyzing payload structure...');
+    console.log("[Gemini Exporter] Analyzing payload structure...");
     payloads.forEach((payload, idx) => {
-      console.log(`[Gemini Exporter] Payload ${idx} type:`, Array.isArray(payload) ? 'Array' : typeof payload);
+      console.log(
+        `[Gemini Exporter] Payload ${idx} type:`,
+        Array.isArray(payload) ? "Array" : typeof payload
+      );
       if (Array.isArray(payload)) {
         console.log(`[Gemini Exporter] Payload ${idx} length:`, payload.length);
-        console.log(`[Gemini Exporter] Payload ${idx} first level structure:`, 
-          payload.slice(0, 3).map(item => Array.isArray(item) ? `Array[${item.length}]` : typeof item)
+        console.log(
+          `[Gemini Exporter] Payload ${idx} first level structure:`,
+          payload
+            .slice(0, 3)
+            .map((item) =>
+              Array.isArray(item) ? `Array[${item.length}]` : typeof item
+            )
         );
-        
+
         // Print deeper structure for first payload
         if (idx === 0) {
-          console.log('[Gemini Exporter] Deep dive into payload[0]:');
+          console.log("[Gemini Exporter] Deep dive into payload[0]:");
           payload.forEach((item, i) => {
-            if (i < 5) { // Only first 5 items
+            if (i < 5) {
+              // Only first 5 items
               if (Array.isArray(item)) {
-                console.log(`  [${i}]: Array[${item.length}]`, 
-                  item.slice(0, 2).map(x => Array.isArray(x) ? `Array[${x.length}]` : typeof x)
+                console.log(
+                  `  [${i}]: Array[${item.length}]`,
+                  item
+                    .slice(0, 2)
+                    .map((x) =>
+                      Array.isArray(x) ? `Array[${x.length}]` : typeof x
+                    )
                 );
               } else {
                 console.log(`  [${i}]:`, typeof item, item);
@@ -672,13 +704,15 @@
         }
       }
     });
-    
+
     for (const p of payloads) {
       const b = extractBlocksFromPayloadRoot(p);
-      console.log(`[Gemini Exporter] Extracted ${b.length} blocks from this payload`);
+      console.log(
+        `[Gemini Exporter] Extracted ${b.length} blocks from this payload`
+      );
       blocks = blocks.concat(b);
     }
-    
+
     const withIndex = blocks.map((b, i) => ({ ...b, _i: i }));
     withIndex.sort((a, b) => {
       const c = cmpTimestampAsc(a, b);
@@ -716,11 +750,130 @@
     return `# ${title}\n\n${parts.join("\n\n")}\n`;
   }
 
+  function blocksToHtml(blocks, title) {
+    // Generate content HTML that matches the template.js structure
+    let contentHtml = '';
+    
+    for (const block of blocks) {
+      contentHtml += '<div class="turn">';
+      
+      // User message
+      if (block.userText) {
+        contentHtml += `
+          <div class="role-label">You</div>
+          <div class="user-card">
+            <div class="content">${escapeHtml(block.userText).replace(/\n/g, '<br>')}</div>
+          </div>`;
+      }
+      
+      // Assistant message
+      if (block.assistantText) {
+        contentHtml += `
+          <div class="role-label" style="margin-top: 24px;">Gemini</div>
+          <div class="model-card">
+            <div class="model-header">
+              <div class="dot red"></div>
+              <div class="dot yellow"></div>
+              <div class="dot green"></div>
+            </div>`;
+        
+        // Thoughts section (collapsible)
+        if (block.thoughtsText) {
+          contentHtml += `
+            <div class="thinking">
+              <div class="thinking-header" onclick="toggleThinking(this)">
+                <span class="thinking-title">Thinking Process</span>
+                <span class="arrow">↓</span>
+              </div>
+              <div class="thinking-content">${escapeHtml(block.thoughtsText)}</div>
+            </div>`;
+        }
+        
+        contentHtml += `
+            <div class="model-content">
+              ${escapeHtml(block.assistantText).replace(/\n/g, '<br>')}
+            </div>
+          </div>`;
+      }
+      
+      contentHtml += '</div>';
+    }
+    
+    // Use the shared template from template.js if available
+    const date = new Date().toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+    
+    if (typeof window.getHTMLTemplate === 'function') {
+      return window.getHTMLTemplate(title, date, contentHtml);
+    }
+    
+    // Fallback to basic HTML if template not available
+    return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${title}</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; background: #f5f5f7; }
+  .turn { margin-bottom: 40px; }
+  .role-label { font-size: 12px; font-weight: 600; text-transform: uppercase; color: #666; margin-bottom: 8px; }
+  .user-card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .model-card { background: #1a1a1a; color: #e2e2e2; border-radius: 12px; overflow: hidden; }
+  .model-header { background: #111; padding: 8px 12px; display: flex; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.red { background: #ff5f56; }
+  .dot.yellow { background: #ffbd2e; }
+  .dot.green { background: #27c93f; }
+  .model-content { padding: 20px; line-height: 1.6; }
+  .thinking { border-bottom: 1px solid #333; }
+  .thinking-header { padding: 12px 20px; cursor: pointer; color: #666; font-size: 12px; }
+  .thinking-content { padding: 0 20px 16px; color: #888; font-size: 13px; white-space: pre-wrap; }
+</style>
+<script>
+function toggleThinking(header) {
+  const content = header.nextElementSibling;
+  content.style.display = content.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+</head><body>
+<h1 style="text-align:center;margin-bottom:40px">${title}</h1>
+<p style="text-align:center;color:#666;margin-bottom:60px">${date}</p>
+${contentHtml}
+</body></html>`;
+  }
+
+  function blocksToText(blocks, title) {
+    let text = `${title}\n${"=".repeat(title.length)}\n\n`;
+
+    for (const block of blocks) {
+      if (block.userText) {
+        text += `User:\n${block.userText}\n\n`;
+      }
+      if (block.assistantText) {
+        text += `Gemini:\n${block.assistantText}\n\n`;
+        if (block.thoughtsText) {
+          text += `Thoughts:\n${block.thoughtsText}\n\n`;
+        }
+      }
+      text += `${"-".repeat(20)}\n\n`;
+    }
+    return text;
+  }
+
+  function escapeHtml(unsafe) {
+    return unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   // ===========================
   // Main Export Function
   // ===========================
 
-  async function exportGeminiChat() {
+  async function exportGeminiChat(options = {}) {
     try {
       const route = getRouteFromUrl();
       if (!route || !route.chatId) {
@@ -786,17 +939,41 @@
         }
       }
 
-      const md = stdLB(blocksToMarkdown(blocks, title));
-      const filename = `${sanitizeFilename(title)}_${getCurrentTimestamp()}.md`;
+      // Determine export format
+      const format = options.format || 'markdown';
+      let content = '';
+      let mimeType = 'text/markdown';
+      let extension = 'md';
+
+      if (format === 'json') {
+        content = JSON.stringify({ title, messages: blocks }, null, 2);
+        mimeType = 'application/json';
+        extension = 'json';
+      } else if (format === 'html') {
+        content = blocksToHtml(blocks, title);
+        mimeType = 'text/html';
+        extension = 'html';
+      } else if (format === 'text') {
+        content = blocksToText(blocks, title);
+        mimeType = 'text/plain';
+        extension = 'txt';
+      } else {
+        // Default to Markdown
+        content = stdLB(blocksToMarkdown(blocks, title));
+        mimeType = 'text/markdown';
+        extension = 'md';
+      }
+
+      const filename = `${sanitizeFilename(title)}_${getCurrentTimestamp()}.${extension}`;
 
       // Check if this is a download request or copy request
-      const shouldDownload = window.__GEMINI_EXPORT_MODE__ === 'download';
+      const shouldDownload = window.__GEMINI_EXPORT_MODE__ === 'download' || options.download;
       
       if (shouldDownload) {
         // Send to background for download
         chrome.runtime.sendMessage({
           action: "DOWNLOAD_BLOB",
-          url: `data:text/markdown;charset=utf-8,${encodeURIComponent(md)}`,
+          url: `data:${mimeType};charset=utf-8,${encodeURIComponent(content)}`,
           filename: filename,
         });
 
@@ -808,7 +985,7 @@
       } else {
         // Copy to clipboard
         try {
-          await navigator.clipboard.writeText(md);
+          await navigator.clipboard.writeText(content);
           chrome.runtime.sendMessage({
             action: "UPDATE_STATUS",
             message: `Copied ${blocks.length} messages to clipboard!`,
@@ -819,13 +996,13 @@
           // Fallback: send data back to popup for copying
           chrome.runtime.sendMessage({
             action: "SCRAPE_COMPLETE",
-            data: md,
+            data: content,
             copyToClipboard: true,
           });
         }
       }
 
-      return { success: true, filename, markdown: md };
+      return { success: true, filename, content };
     } catch (err) {
       console.error("[Gemini Exporter] Error:", err);
       chrome.runtime.sendMessage({
@@ -853,8 +1030,10 @@
   // Listen for messages from the popup
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "START_SCRAPE_GEMINI") {
-      console.log("[Gemini Exporter] Received START_SCRAPE_GEMINI command");
-      exportGeminiChat()
+      console.log("[Gemini Exporter] Received START_SCRAPE_GEMINI command", request);
+      
+      // Pass the request options (format, download, etc.) to exportGeminiChat
+      exportGeminiChat(request)
         .then((result) => {
           console.log("[Gemini Exporter] Export completed:", result);
           sendResponse(result);
