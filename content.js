@@ -1134,6 +1134,23 @@ tags: [AI, Chat, Export]
               format: 'html',
               directDownload: true
             });
+          } else if (request.format === 'markdown' && request.download) {
+            // Avoid large message payloads by downloading directly in content script
+            const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `export_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.md`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            chrome.runtime.sendMessage({
+              action: "SCRAPE_COMPLETE",
+              format: 'markdown',
+              directDownload: true
+            });
           } else {
             // For other formats (markdown, json), send data back to popup
             chrome.runtime.sendMessage({
