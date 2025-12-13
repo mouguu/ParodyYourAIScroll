@@ -24,11 +24,11 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (isChatGPT) {
       pageTitle.textContent = "ChatGPT - Conversation";
       urlText.textContent = "https://chatgpt.com";
-      urlIcon.src = "https://chatgpt.com/favicon.ico";
+      urlIcon.src = "https://www.google.com/s2/favicons?sz=64&domain_url=https://chatgpt.com";
     } else if (isGemini) {
       pageTitle.textContent = "Gemini - Chat";
       urlText.textContent = "https://gemini.google.com";
-      urlIcon.src = "https://www.gstatic.com/lamda/images/gemini_favicon_f069958c85030456e93de685481c559f160ea06b.png";
+      urlIcon.src = "https://upload.wikimedia.org/wikipedia/commons/1/1d/Google_Gemini_icon_2025.svg";
       
       // Hide ZIP option for Gemini (no media files to package)
       const zipOption = document.querySelector('.option-item[data-value="zip"]');
@@ -61,16 +61,20 @@ document.addEventListener("DOMContentLoaded", () => {
               const err = chrome.runtime.lastError.message;
               if (err.includes("Receiving end does not exist")) {
                 // Content script might not be loaded. Try to inject it.
-                updateStatus("Injecting script...", "info");
+                updateStatus("Injecting scripts...", "info");
+                
+                // Inject all required dependencies in order
                 chrome.scripting.executeScript(
                   {
                     target: { tabId: tabs[0].id },
-                    files: ["content.js"],
+                    files: ["libs/jszip.min.js", "template.js", "gemini_exporter.js", "content.js"],
                   },
                   () => {
                     if (chrome.runtime.lastError) {
                       console.error("Injection failed:", chrome.runtime.lastError.message);
-                      updateStatus("Failed to inject script. Please refresh page.", "error");
+                      // Note: chatgpt_token.js runs in MAIN world and cannot be injected this way
+                      // User must refresh for ChatGPT token extraction to work
+                      updateStatus("Please refresh the page and try again.", "error");
                       reject(chrome.runtime.lastError);
                     } else {
                       // Retry sending the message
@@ -79,7 +83,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         { action, ...payload },
                         (retryResponse) => {
                           if (chrome.runtime.lastError) {
-                            updateStatus("Connection failed after injection. Refresh?", "error");
+                            updateStatus("Connection failed. Please refresh.", "error");
                             reject(chrome.runtime.lastError);
                           } else {
                             resolve(retryResponse);

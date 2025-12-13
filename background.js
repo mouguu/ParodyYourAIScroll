@@ -47,8 +47,26 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
 });
 
 // Handle download requests from content script
-// Chunked download storage
+// Chunked download storage with cleanup timestamps
 let downloadChunks = {};
+let chunkTimestamps = {};
+
+// Cleanup stale chunks after 5 minutes
+const CHUNK_TIMEOUT_MS = 5 * 60 * 1000;
+
+function cleanupStaleChunks() {
+  const now = Date.now();
+  for (const fileId of Object.keys(chunkTimestamps)) {
+    if (now - chunkTimestamps[fileId] > CHUNK_TIMEOUT_MS) {
+      console.log(`[Background] Cleaning up stale chunks for: ${fileId}`);
+      delete downloadChunks[fileId];
+      delete chunkTimestamps[fileId];
+    }
+  }
+}
+
+// Run cleanup every 2 minutes
+setInterval(cleanupStaleChunks, 2 * 60 * 1000);
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "DOWNLOAD_BLOB") {
@@ -73,6 +91,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       downloadChunks[fileId] = new Array(total);
     }
     downloadChunks[fileId][index] = chunk;
+    chunkTimestamps[fileId] = Date.now(); // Track last activity
     sendResponse({ success: true });
     return false;
   }
@@ -84,6 +103,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!chunks || chunks.some(c => !c)) {
       sendResponse({ success: false, error: "Missing chunks" });
       delete downloadChunks[fileId];
+      delete chunkTimestamps[fileId];
       return false;
     }
     
@@ -97,6 +117,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }, (downloadId) => {
       // Cleanup
       delete downloadChunks[fileId];
+      delete chunkTimestamps[fileId];
       
       if (chrome.runtime.lastError) {
         sendResponse({ success: false, error: chrome.runtime.lastError.message });
