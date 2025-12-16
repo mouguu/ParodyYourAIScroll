@@ -1,5 +1,7 @@
 # ParodyYourAIScroll
 
+[中文文档](README_CN.md) | [English](README.md)
+
 ![Preview](assets/preview.png)
 
 A Chrome extension to export AI conversations from Google AI Studio, ChatGPT, and Gemini.
