@@ -4,6 +4,70 @@
  */
 (function() {
   'use strict';
+
+  function deepClone(value) {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function looksLikeConversation(payload) {
+    return !!(
+      payload &&
+      typeof payload === 'object' &&
+      payload.mapping &&
+      typeof payload.mapping === 'object'
+    );
+  }
+
+  function unwrapConversation(candidate) {
+    if (!candidate || typeof candidate !== 'object') return null;
+
+    const directCandidates = [
+      candidate,
+      candidate.data,
+      candidate.conversation,
+      candidate.serverResponse?.data,
+      candidate.props?.pageProps?.serverResponse?.data,
+    ];
+
+    for (const item of directCandidates) {
+      if (looksLikeConversation(item)) {
+        return deepClone(item);
+      }
+    }
+
+    return null;
+  }
+
+  function extractConversation() {
+    try {
+      // NEXT_DATA
+      const nextConversation = unwrapConversation(window.__NEXT_DATA__?.props?.pageProps);
+      if (nextConversation) {
+        console.log('[ChatGPT Data] Conversation found via NEXT_DATA');
+        return nextConversation;
+      }
+
+      // Remix loaderData
+      const loaderData = window.__remixContext?.state?.loaderData;
+      if (loaderData && typeof loaderData === 'object') {
+        for (const [routeKey, routeData] of Object.entries(loaderData)) {
+          const found = unwrapConversation(routeData);
+          if (found) {
+            console.log('[ChatGPT Data] Conversation found via remix route:', routeKey);
+            return found;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[ChatGPT Data] Extraction error:', e);
+    }
+
+    return null;
+  }
   
   function extractToken() {
     let token = null;
@@ -60,10 +124,12 @@
     return token;
   }
   
-  // Listen for token requests from the content script
+  // Listen for requests from the content script
   window.addEventListener('message', function(event) {
     if (event.source !== window) return;
-    if (event.data && event.data.type === 'CHATGPT_TOKEN_REQUEST') {
+    if (!event.data || !event.data.type) return;
+
+    if (event.data.type === 'CHATGPT_TOKEN_REQUEST') {
       const token = extractToken();
       
       // Send the token back to the content script
@@ -72,7 +138,15 @@
         token: token
       }, '*');
     }
+
+    if (event.data.type === 'CHATGPT_CONVERSATION_REQUEST') {
+      const conversation = extractConversation();
+      window.postMessage({
+        type: 'CHATGPT_CONVERSATION_RESULT',
+        conversation: conversation
+      }, '*');
+    }
   });
   
-  console.log('[ChatGPT Token] Token extractor ready (v2)');
+  console.log('[ChatGPT Token] Token extractor ready (v3)');
 })();

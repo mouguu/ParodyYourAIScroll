@@ -1142,6 +1142,28 @@ tags: [AI, Chat, Export]
     return null;
   }
 
+  function isSharePage() {
+    return /^\/share\/[a-z0-9-]+\/?$/i.test(location.pathname);
+  }
+
+  // Legacy fallback: may work in some Chrome contexts where page globals are visible.
+  function getConversationFromSharePage() {
+    const nextData = window.__NEXT_DATA__;
+    const nextPayload = nextData?.props?.pageProps?.serverResponse?.data;
+    if (nextPayload) {
+      return JSON.parse(JSON.stringify(nextPayload));
+    }
+
+    const remixPayload =
+      window.__remixContext?.state?.loaderData?.["routes/share.$shareId.($action)"]
+        ?.serverResponse?.data;
+    if (remixPayload) {
+      return JSON.parse(JSON.stringify(remixPayload));
+    }
+
+    return null;
+  }
+
   function getAccessToken() {
     return new Promise((resolve) => {
       const listener = (event) => {
@@ -1167,24 +1189,124 @@ tags: [AI, Chat, Export]
     });
   }
 
+  async function getAccessTokenFromSessionApi() {
+    try {
+      const response = await fetch("/api/auth/session", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok) return null;
+
+      const session = await response.json();
+      return session?.accessToken || null;
+    } catch (e) {
+      console.warn("[ChatGPT Fetch] Session token fetch failed:", e);
+      return null;
+    }
+  }
+
+  function getConversationFromPageContext() {
+    return new Promise((resolve) => {
+      const listener = (event) => {
+        if (
+          event.source === window &&
+          event.data &&
+          event.data.type === "CHATGPT_CONVERSATION_RESULT"
+        ) {
+          window.removeEventListener("message", listener);
+          resolve(event.data.conversation || null);
+        }
+      };
+      window.addEventListener("message", listener);
+
+      // Request conversation payload from MAIN world script (chatgpt_token.js)
+      window.postMessage({ type: "CHATGPT_CONVERSATION_REQUEST" }, "*");
+
+      setTimeout(() => {
+        window.removeEventListener("message", listener);
+        resolve(null);
+      }, 3000);
+    });
+  }
+
   async function fetchConversation_ChatGPT(chatId) {
+    console.log(
+      "[ChatGPT Fetch] Starting conversation fetch:",
+      chatId,
+      "| path:",
+      location.pathname
+    );
+
+    // 1) Best effort: read already-loaded conversation from page runtime.
+    const pageConversation = await getConversationFromPageContext();
+    if (pageConversation?.mapping) {
+      console.log("[ChatGPT Fetch] Using page context conversation payload");
+      return { id: chatId, ...pageConversation };
+    }
+
+    // 2) Legacy fallback for share pages in case bridge fails.
+    if (isSharePage()) {
+      const shareConversation = getConversationFromSharePage();
+      if (shareConversation?.mapping) {
+        console.log("[ChatGPT Fetch] Using share fallback payload");
+        return { id: chatId, ...shareConversation };
+      }
+      throw new Error(
+        "Could not read share conversation data from page. Please refresh the page and try again."
+      );
+    }
+
     const apiUrl = getApiUrl();
-    // Wait for the injected script to retrieve the token
-    const accessToken = await getAccessToken();
+    // 3) API fallback for normal /c/{id} pages.
+    let accessToken = await getAccessToken();
+    if (!accessToken) {
+      accessToken = await getAccessTokenFromSessionApi();
+    }
 
     if (!accessToken)
       throw new Error(
         "Could not find Access Token. Please refresh the page and try again."
       );
 
-    const response = await fetch(`${apiUrl}/conversation/${chatId}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-    });
+    const makeRequest = (token) =>
+      fetch(`${apiUrl}/conversation/${chatId}`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+    let response = await makeRequest(accessToken);
+
+    // Token may be stale. Retry once with fresh session token.
+    if (
+      !response.ok &&
+      [401, 403, 404].includes(response.status)
+    ) {
+      const freshToken = await getAccessTokenFromSessionApi();
+      if (freshToken && freshToken !== accessToken) {
+        console.warn(
+          `[ChatGPT Fetch] Retrying with refreshed token after ${response.status}`
+        );
+        accessToken = freshToken;
+        response = await makeRequest(accessToken);
+      }
+    }
 
     if (!response.ok) {
+      // Final fallback: try page context once more before failing.
+      const fallbackConversation = await getConversationFromPageContext();
+      if (fallbackConversation?.mapping) {
+        console.warn(
+          `[ChatGPT Fetch] API ${response.status}, recovered via page context`
+        );
+        return { id: chatId, ...fallbackConversation };
+      }
+
       throw new Error(
         `Failed to fetch conversation: ${response.status} ${response.statusText}`
       );
@@ -1196,7 +1318,14 @@ tags: [AI, Chat, Export]
   async function resolveImageAssets(conversation) {
     const mapping = conversation.mapping;
     const apiUrl = getApiUrl();
-    const accessToken = await getAccessToken();
+    let accessToken = await getAccessToken();
+    if (!accessToken) {
+      accessToken = await getAccessTokenFromSessionApi();
+    }
+
+    if (!accessToken) {
+      return;
+    }
 
     const imageAssets = [];
     Object.values(mapping).forEach((node) => {
@@ -1237,6 +1366,54 @@ tags: [AI, Chat, Export]
         console.warn("Failed to resolve asset", asset.pointer, e);
       }
     }
+  }
+
+  function extractChatGPTDataFromDOM() {
+    const messageNodes = Array.from(
+      document.querySelectorAll('[data-message-author-role]')
+    );
+
+    const structuredData = [];
+    let domOrder = 0;
+
+    for (const node of messageNodes) {
+      const authorRole = node.getAttribute("data-message-author-role");
+      if (authorRole !== "user" && authorRole !== "assistant") continue;
+
+      const role = authorRole === "assistant" ? "model" : "user";
+      const markdownNode = node.querySelector(".markdown");
+      let text = (markdownNode?.innerText || node.innerText || "").trim();
+
+      // Remove common action labels that may be appended in UI text.
+      text = text
+        .replace(/\n(?:Copy|Edit|Read aloud|Good response|Bad response|Regenerate)\s*$/gi, "")
+        .trim();
+
+      const inlineImages = Array.from(node.querySelectorAll("img[src]"));
+      inlineImages.forEach((img, idx) => {
+        const src = img.getAttribute("src");
+        if (!src) return;
+        const alt = (img.getAttribute("alt") || `image_${idx + 1}`).trim();
+        if (!text.includes(src)) {
+          text += `${text ? "\n\n" : ""}![${alt}](${src})`;
+        }
+      });
+
+      // Keep turns that have either text or inline media.
+      if (!text) continue;
+
+      structuredData.push({
+        domOrder: domOrder++,
+        type: role,
+        userText: role === "user" ? text : null,
+        thoughtText: null,
+        responseText: role === "model" ? text : null,
+        images: [],
+        videos: [],
+      });
+    }
+
+    return structuredData;
   }
 
   async function processChatGPTData(conversation) {
@@ -1347,13 +1524,30 @@ tags: [AI, Chat, Export]
                 "Could not find Chat ID. Please open a specific conversation."
               );
 
-            const convData = await fetchConversation_ChatGPT(chatId);
-            chrome.runtime.sendMessage({
-              action: "UPDATE_STATUS",
-              status: "Processing Images...",
-            });
+            try {
+              const convData = await fetchConversation_ChatGPT(chatId);
+              chrome.runtime.sendMessage({
+                action: "UPDATE_STATUS",
+                status: "Processing Images...",
+              });
 
-            structuredData = await processChatGPTData(convData);
+              structuredData = await processChatGPTData(convData);
+            } catch (chatFetchError) {
+              console.warn(
+                "[ChatGPT Fetch] API/page-context failed, falling back to DOM extraction:",
+                chatFetchError
+              );
+
+              chrome.runtime.sendMessage({
+                action: "UPDATE_STATUS",
+                status: "Fallback: Extracting from page...",
+              });
+
+              structuredData = extractChatGPTDataFromDOM();
+              if (!structuredData.length) {
+                throw chatFetchError;
+              }
+            }
           } else {
             throw new Error("Unsupported platform");
           }
