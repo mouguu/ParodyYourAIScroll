@@ -11,14 +11,19 @@
   // Utility Functions
   // ===========================
 
-  function getCurrentTimestamp() {
-    return new Date().toISOString().slice(0, 19).replace(/:/g, "-");
-  }
+  function getExportFilename({ title, extension, route }) {
+    if (typeof window.buildExportFilename === "function") {
+      return window.buildExportFilename({
+        platform: "Gemini",
+        theme: title,
+        extension,
+        conversationId: route?.chatId,
+        url: route?.sourcePath || location.pathname,
+        hashSeed: [route?.sourcePath, title].filter(Boolean).join("|"),
+      });
+    }
 
-  function sanitizeFilename(title) {
-    return (title || "Gemini Chat")
-      .replace(/[<>:"/\\|?\*]/g, "_")
-      .replace(/\s+/g, "_");
+    return `export_${Date.now()}.${extension}`;
   }
 
   function stdLB(text) {
@@ -41,8 +46,8 @@
    *   - /u/:index/app/:chatId
    *   - /u/:index/gem/:gemId/:chatId
    */
-  function getRouteFromUrl() {
-    const path = location.pathname.replace(/\/+$/, "");
+  function getRouteFromPath(pathname = location.pathname) {
+    const path = pathname.replace(/\/+$/, "");
     const segs = path.split("/").filter(Boolean);
 
     if (segs.length === 0) return null;
@@ -85,6 +90,10 @@
     }
 
     return null;
+  }
+
+  function getRouteFromUrl() {
+    return getRouteFromPath(location.pathname);
   }
 
   function getLang() {
@@ -964,7 +973,7 @@ ${contentHtml}
         extension = 'md';
       }
 
-      const filename = `${sanitizeFilename(title)}_${getCurrentTimestamp()}.${extension}`;
+      const filename = getExportFilename({ title, extension, route });
 
       // Check if this is a download request or copy request
       const shouldDownload = window.__GEMINI_EXPORT_MODE__ === 'download' || options.download;
@@ -1014,6 +1023,351 @@ ${contentHtml}
     }
   }
 
+  function normalizeGeminiBatchLimit(value) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1) return 10;
+    return Math.min(parsed, 500);
+  }
+
+  function normalizeGeminiBatchFormat(value) {
+    const raw = String(value || "markdown").toLowerCase();
+    return ["markdown", "json", "html", "text", "zip"].includes(raw)
+      ? raw
+      : "markdown";
+  }
+
+  function getGeminiBatchContentFormat(format) {
+    return format === "zip" ? "markdown" : format;
+  }
+
+  function getGeminiBatchContentExtension(format) {
+    if (format === "json") return "json";
+    if (format === "html") return "html";
+    if (format === "text") return "txt";
+    return "md";
+  }
+
+  function sanitizeGeminiZipEntryName(filename, fallback = "export.md") {
+    const sanitized = String(filename || "")
+      .replace(/[\\/]+/g, "-")
+      .replace(/[\u0000-\u001f]+/g, "")
+      .replace(/^\.+/, "")
+      .trim();
+
+    return sanitized || fallback;
+  }
+
+  function buildGeminiBatchEntryName(usedNames, index, filename) {
+    const paddedIndex = String(index + 1).padStart(2, "0");
+    const safeFilename = sanitizeGeminiZipEntryName(filename);
+    const dotIndex = safeFilename.lastIndexOf(".");
+    const base =
+      dotIndex > 0 ? safeFilename.slice(0, dotIndex) : safeFilename;
+    const extension = dotIndex > 0 ? safeFilename.slice(dotIndex) : "";
+    let candidate = `${paddedIndex}-${safeFilename}`;
+    let suffix = 2;
+
+    while (usedNames.has(candidate)) {
+      candidate = `${paddedIndex}-${base}-${suffix}${extension}`;
+      suffix += 1;
+    }
+
+    usedNames.add(candidate);
+    return candidate;
+  }
+
+  function extractGeminiConversationListFromDOM(limit) {
+    const normalizedLimit = normalizeGeminiBatchLimit(limit);
+    const conversations = [];
+    const seen = new Set();
+    const anchors = Array.from(document.querySelectorAll("a[href]"));
+
+    anchors.forEach((anchor) => {
+      const href = anchor.getAttribute("href") || "";
+      let pathname = "";
+
+      try {
+        pathname = new URL(href, location.origin).pathname;
+      } catch {
+        return;
+      }
+
+      const route = getRouteFromPath(pathname);
+      if (!route?.chatId) return;
+
+      const key = route.sourcePath || route.chatId;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const row =
+        anchor.closest("li") ||
+        anchor.closest("[role='listitem']") ||
+        anchor.closest("[data-test-id]") ||
+        anchor;
+      const titleCandidate =
+        anchor.getAttribute("aria-label") ||
+        row?.getAttribute?.("aria-label") ||
+        anchor.textContent ||
+        row?.textContent ||
+        "";
+      const title = String(titleCandidate || "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      conversations.push({
+        route,
+        title,
+      });
+    });
+
+    return conversations.slice(0, normalizedLimit);
+  }
+
+  async function buildGeminiExportContent(route, options = {}) {
+    const raw = await fetchConversationPayload(route);
+    const payloads = parseBatchExecute(raw);
+
+    if (!payloads.length) {
+      throw new Error("No conversation payloads found in Gemini response.");
+    }
+
+    const blocks = extractAllBlocks(payloads);
+    if (!blocks.length) {
+      throw new Error("Could not extract any Gemini message blocks.");
+    }
+
+    let title =
+      typeof options.title === "string" && options.title.trim()
+        ? options.title.trim()
+        : await fetchConversationTitle(route);
+
+    if (!title) {
+      title = "Gemini Chat";
+    }
+
+    const format = options.format || "markdown";
+    let content = "";
+    let extension = "md";
+
+    if (format === "json") {
+      content = JSON.stringify({ title, messages: blocks }, null, 2);
+      extension = "json";
+    } else if (format === "html") {
+      content = blocksToHtml(blocks, title);
+      extension = "html";
+    } else if (format === "text") {
+      content = blocksToText(blocks, title);
+      extension = "txt";
+    } else {
+      content = stdLB(blocksToMarkdown(blocks, title));
+      extension = "md";
+    }
+
+    return {
+      title,
+      content,
+      extension,
+      messageCount: blocks.length,
+      filename: getExportFilename({ title, extension, route }),
+    };
+  }
+
+  function downloadGeminiBlob(blob, filename) {
+    const reader = new FileReader();
+    reader.onload = async function () {
+      const dataUrl = reader.result;
+
+      if (dataUrl.length < 10 * 1024 * 1024) {
+        chrome.runtime.sendMessage({
+          action: "DOWNLOAD_BLOB",
+          url: dataUrl,
+          filename,
+        });
+        return;
+      }
+
+      const CHUNK_SIZE = 5 * 1024 * 1024;
+      const totalChunks = Math.ceil(dataUrl.length / CHUNK_SIZE);
+      const fileId = `gemini-${Date.now()}`;
+
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = dataUrl.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        await new Promise((resolve) => {
+          chrome.runtime.sendMessage(
+            {
+              action: "DOWNLOAD_CHUNK",
+              fileId,
+              chunk,
+              index: i,
+              total: totalChunks,
+            },
+            resolve
+          );
+        });
+      }
+
+      chrome.runtime.sendMessage({
+        action: "DOWNLOAD_FINISH",
+        fileId,
+        filename,
+      });
+    };
+    reader.readAsDataURL(blob);
+  }
+
+  function buildGeminiBatchZipFilename(limit, exportedCount, conversations) {
+    const count = exportedCount || limit;
+    const ids = Array.isArray(conversations)
+      ? conversations.map((item) => item.route?.sourcePath).filter(Boolean)
+      : [];
+
+    if (typeof window.buildExportFilename === "function") {
+      return window.buildExportFilename({
+        platform: "Gemini",
+        theme: `recent-${count}-conversations`,
+        extension: "zip",
+        hashSeed: ids.join("|") || `${limit}|${Date.now()}`,
+      });
+    }
+
+    const date = new Date().toISOString().slice(0, 10);
+    return `gemini-recent-${count}-conversations-${date}.zip`;
+  }
+
+  async function exportGeminiRecentConversations(options = {}) {
+    const limit = normalizeGeminiBatchLimit(options.limit);
+    const requestedFormat = normalizeGeminiBatchFormat(options.format);
+    const contentFormat = getGeminiBatchContentFormat(requestedFormat);
+    const ZipLib =
+      (typeof JSZip !== "undefined" ? JSZip : undefined) || window.JSZip;
+
+    if (!ZipLib) {
+      throw new Error(
+        "JSZip not loaded. Please go to chrome://extensions and reload this extension."
+      );
+    }
+
+    chrome.runtime.sendMessage({
+      action: "UPDATE_STATUS",
+      message: `Reading rendered Gemini recents (${limit})...`,
+      type: "info",
+    });
+
+    const conversations = extractGeminiConversationListFromDOM(limit);
+    if (!conversations.length) {
+      throw new Error(
+        "No rendered Gemini recent chats found. Open Gemini with the recent chat list visible, then try again."
+      );
+    }
+
+    const zip = new ZipLib();
+    const usedNames = new Set();
+    const manifest = {
+      generated_at_utc: new Date().toISOString(),
+      source: "Gemini",
+      requested_limit: limit,
+      returned_count: conversations.length,
+      selected_format: requestedFormat,
+      export_format: contentFormat,
+      list_source: "rendered_dom",
+      conversations: [],
+    };
+
+    let exportedCount = 0;
+    let firstError = null;
+
+    for (let index = 0; index < conversations.length; index++) {
+      const conversation = conversations[index];
+      const label = conversation.title || conversation.route.sourcePath;
+
+      try {
+        chrome.runtime.sendMessage({
+          action: "UPDATE_STATUS",
+          message: `Exporting ${index + 1}/${conversations.length}: ${label.slice(0, 54)}`,
+          type: "info",
+        });
+
+        const result = await buildGeminiExportContent(conversation.route, {
+          title: conversation.title,
+          format: contentFormat,
+        });
+        const entryName = buildGeminiBatchEntryName(
+          usedNames,
+          index,
+          result.filename
+        );
+
+        zip.file(entryName, result.content);
+        exportedCount += 1;
+        manifest.conversations.push({
+          index: index + 1,
+          chat_id: conversation.route.chatId,
+          source_path: conversation.route.sourcePath,
+          title: result.title || conversation.title || null,
+          filename: entryName,
+          status: "ok",
+          message_count: result.messageCount,
+        });
+      } catch (error) {
+        if (!firstError) firstError = error;
+        manifest.conversations.push({
+          index: index + 1,
+          chat_id: conversation.route.chatId,
+          source_path: conversation.route.sourcePath,
+          title: conversation.title || null,
+          status: "error",
+          error: String(error?.message || error),
+        });
+      }
+
+      if (index < conversations.length - 1) {
+        await delay(150);
+      }
+    }
+
+    manifest.exported_count = exportedCount;
+    manifest.failed_count = conversations.length - exportedCount;
+
+    if (!exportedCount) {
+      throw new Error(
+        `No Gemini conversations could be exported. ${
+          firstError?.message || "Please refresh and try again."
+        }`
+      );
+    }
+
+    zip.file("_manifest.json", JSON.stringify(manifest, null, 2));
+
+    chrome.runtime.sendMessage({
+      action: "UPDATE_STATUS",
+      message: `Generating Gemini batch ZIP (${exportedCount}/${conversations.length})...`,
+      type: "info",
+    });
+
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const zipFilename = buildGeminiBatchZipFilename(
+      limit,
+      exportedCount,
+      conversations
+    );
+
+    downloadGeminiBlob(zipBlob, zipFilename);
+
+    chrome.runtime.sendMessage({
+      action: "UPDATE_STATUS",
+      message: `Batch ZIP ready: ${exportedCount}/${conversations.length} exported`,
+      type: "success",
+    });
+
+    return {
+      success: true,
+      filename: zipFilename,
+      exportedCount,
+      totalCount: conversations.length,
+      failedCount: conversations.length - exportedCount,
+    };
+  }
+
   // ===========================
   // Message Listener
   // ===========================
@@ -1044,12 +1398,31 @@ ${contentHtml}
         });
       return true; // Keep channel open for async response
     }
+
+    if (request.action === "START_GEMINI_BATCH_EXPORT") {
+      console.log("[Gemini Exporter] Received START_GEMINI_BATCH_EXPORT command", request);
+
+      exportGeminiRecentConversations(request)
+        .then((result) => {
+          sendResponse(result);
+        })
+        .catch((err) => {
+          console.error("[Gemini Exporter] Batch export failed:", err);
+          chrome.runtime.sendMessage({
+            action: "SCRAPE_ERROR",
+            error: err.message,
+          });
+          sendResponse({ success: false, error: err.message });
+        });
+      return true;
+    }
   });
 
   // Export for testing
   if (typeof window !== "undefined") {
     window.GeminiExporter = {
       exportGeminiChat,
+      exportGeminiRecentConversations,
     };
   }
 })();

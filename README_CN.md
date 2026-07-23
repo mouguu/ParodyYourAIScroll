@@ -4,7 +4,7 @@
 
 ![Preview](assets/preview.png)
 
-一款用于从 Google AI Studio、ChatGPT 和 Gemini 导出 AI 对话记录的 Chrome 扩展插件。
+一款用于从 Google AI Studio、ChatGPT、Gemini 和 Claude 导出 AI 对话记录的 Chrome 扩展插件。
 
 ## 💡 灵感与动机
 
@@ -22,9 +22,11 @@
 - ✅ 支持从 **Google AI Studio** 导出对话
 - ✅ 支持从 **ChatGPT** 导出对话
 - ✅ 支持从 **Gemini** 导出对话（支持导出思考/Thoughts 内容）
+- ✅ 支持从 **Claude** 导出对话
 - ✅ 支持导出为 **Markdown** 和 **JSON** 格式
 - ✅ 干净、现代的 UI 界面（采用 Inter 字体）
-- ✅ 自动滚动功能，确保捕获完整的对话历史
+- ✅ Google AI Studio、ChatGPT、Gemini 和 Claude 优先通过 API/RPC 导出
+- ✅ 登录态数据接口不可用时自动回退到滚动抓取
 - 🚀 **智能 ZIP 打包导出** - 自动下载并将对话中嵌入的所有媒体文件（图片、视频）打包！
 
 ### 🎯 智能 ZIP 打包导出
@@ -68,13 +70,25 @@ _示例：包含丰富媒体资源、精美排版和深色主题的 HTML 导出�
 - **Google AI Studio** - https://aistudio.google.com
 - **ChatGPT** - https://chatgpt.com
 - **Gemini** - https://gemini.google.com
+- **Claude** - https://claude.ai
 
 ## 📖 使用指南
 
-1. 打开 AI Studio, ChatGPT 或 Gemini 网页并进入任意对话
+1. 打开 AI Studio、ChatGPT、Gemini 或 Claude 网页并进入任意对话
 2. 点击浏览器右上角的插件图标
 3. 选择您需要的导出格式（Markdown, JSON 或 HTML）
 4. 点击 "**Export**" 按钮进行下载，或复制内容到剪贴板
+
+Google AI Studio 用户在安装或更新插件后，需要刷新一次已经保存的 Prompt。
+插件随后会复用 AI Studio 登录态下的只读 MakerSuite RPC，直接读取完整 Prompt，
+无需滚动。尚未保存的 `new_*` Prompt 或 RPC 不可用时会自动回退到 DOM 抓取。
+“粘贴为文件”的文本附件会在页面登录态内根据 Drive 文件 ID 读取，并把正文内联到
+导出结果；短期访问令牌不会离开页面桥接层，也不会写入导出文件。插件会同时保留
+AI Studio 的 `fetch` 与 XHR 请求模板，确保附件读取复用 Prompt 的同一登录态；导出
+元数据也会明确记录附件正文成功数与失败数。AI Studio 弹窗提供会记住选择的
+“Attachment text”开关；关闭后只保留附件引用，不再请求 Drive 正文。
+附件元数据和正文会采用限流并发读取，并在页面桥接层短期缓存，让同一 Prompt 的
+重复复制或下载更快。
 
 ## 🛠️ 技术栈
 

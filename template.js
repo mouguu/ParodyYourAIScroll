@@ -298,5 +298,133 @@ function getHTMLTemplate(title, date, content) {
 </html>`;
 }
 
+function cleanExportTheme(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  return raw
+    .replace(
+      /\s*[-|:]\s*(ChatGPT|OpenAI|Claude|Gemini|Google Gemini|Google AI Studio|AI Studio)\s*$/i,
+      ""
+    )
+    .trim();
+}
+
+function sanitizeExportSegment(value, fallback = "untitled", options = {}) {
+  const {
+    maxLength = 48,
+    lowerCase = true,
+  } = options;
+
+  let result = String(value || "")
+    .normalize("NFKC")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, " ")
+    .replace(/\+/g, " ")
+    .trim();
+
+  result = result.replace(/\s+/g, "-").replace(/-+/g, "-");
+  result = result.replace(/^[-._]+|[-._]+$/g, "");
+
+  if (lowerCase) {
+    result = result.toLowerCase();
+  }
+
+  if (result.length > maxLength) {
+    result = result.slice(0, maxLength).replace(/[-._]+$/g, "");
+  }
+
+  return result || fallback;
+}
+
+function inferExportPlatform(platform) {
+  const raw = String(platform || "").trim().toLowerCase();
+  const href = typeof location !== "undefined" ? location.href : "";
+
+  if (
+    raw.includes("chatgpt") ||
+    raw.includes("openai") ||
+    href.includes("chatgpt.com") ||
+    href.includes("chat.openai.com")
+  ) {
+    return "chatgpt";
+  }
+
+  if (
+    raw.includes("claude") ||
+    href.includes("claude.ai")
+  ) {
+    return "claude";
+  }
+
+  if (
+    raw.includes("gemini") ||
+    href.includes("gemini.google.com")
+  ) {
+    return "gemini";
+  }
+
+  if (
+    raw.includes("ai studio") ||
+    raw.includes("aistudio") ||
+    raw.includes("makersuite") ||
+    href.includes("aistudio.google.com")
+  ) {
+    return "aistudio";
+  }
+
+  return sanitizeExportSegment(raw, "export", { maxLength: 24 });
+}
+
+function formatExportDate(dateInput) {
+  const date = dateInput ? new Date(dateInput) : new Date();
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  const year = safeDate.getFullYear();
+  const month = String(safeDate.getMonth() + 1).padStart(2, "0");
+  const day = String(safeDate.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function hashExportSeed(value) {
+  const input = String(value || Date.now());
+  let hash = 2166136261;
+
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(36).padStart(8, "0").slice(-8);
+}
+
+function buildExportFilename(options = {}) {
+  const extension = sanitizeExportSegment(
+    String(options.extension || "md").replace(/^\./, ""),
+    "md",
+    {
+      maxLength: 10,
+    }
+  );
+  const platform = inferExportPlatform(options.platform);
+  const theme = sanitizeExportSegment(
+    cleanExportTheme(options.theme || options.title),
+    "untitled",
+    {
+      maxLength: 64,
+    }
+  );
+  const date = formatExportDate(options.date);
+  const hash = sanitizeExportSegment(
+    options.hash || hashExportSeed(options.hashSeed || options.conversationId || options.url || options.theme || options.title),
+    "00000000",
+    {
+      maxLength: 12,
+    }
+  );
+
+  return `${platform}+${theme}+${date}+${hash}.${extension}`;
+}
+
 // Explicitly export to window to ensure visibility to other content scripts
 window.getHTMLTemplate = getHTMLTemplate;
+window.cleanExportTheme = cleanExportTheme;
+window.buildExportFilename = buildExportFilename;
