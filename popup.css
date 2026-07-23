@@ -185,6 +185,101 @@ body {
   color: #6b7280; /* text-gray-500 */
 }
 
+.attachment-toggle {
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #000000;
+  border: 2px solid #000000;
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 0 #000000;
+  cursor: pointer;
+  text-align: left;
+  outline: none;
+  transition: transform 0.1s, box-shadow 0.1s, background-color 0.1s;
+}
+
+.attachment-toggle:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 0 #000000;
+}
+
+.attachment-toggle:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.attachment-toggle-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attachment-toggle-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.attachment-toggle-description {
+  color: #6b7280;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.attachment-switch {
+  position: relative;
+  flex: 0 0 66px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 8px;
+  background: #e5e7eb;
+  border: 2px solid #000000;
+  border-radius: 999px;
+  transition: background-color 0.15s;
+}
+
+.attachment-switch-label {
+  margin-left: auto;
+  font-size: 0.66rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.attachment-switch-knob {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  background: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+
+.attachment-toggle.is-on .attachment-switch {
+  background: #facc15;
+}
+
+.attachment-toggle.is-on .attachment-switch-label {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.attachment-toggle.is-on .attachment-switch-knob {
+  transform: translateX(32px);
+}
+
 .page-title {
   font-size: 1.125rem; /* text-lg */
   font-weight: 600;
@@ -270,6 +365,58 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 40px; /* Increased gap to match design */
+}
+
+.batch-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.batch-row {
+  gap: 16px;
+  grid-template-columns: 0.9fr 1.2fr;
+  align-items: start;
+}
+
+.batch-limit-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.batch-select {
+  width: 100%;
+  height: 48px;
+  background-color: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 12px;
+  padding: 0 12px;
+  color: #000000;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 800;
+  box-shadow: 4px 4px 0px 0px #000000;
+  outline: none;
+}
+
+.batch-custom-input {
+  width: 100%;
+  height: 40px;
+  background-color: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 10px;
+  padding: 0 12px;
+  color: #000000;
+  font-size: 0.95rem;
+  font-weight: 800;
+  box-shadow: 3px 3px 0px 0px #000000;
+  outline: none;
+}
+
+.batch-row .action-btn {
+  font-size: 0.9rem;
 }
 
 .custom-select-wrapper {

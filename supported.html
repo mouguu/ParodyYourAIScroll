@@ -44,6 +44,27 @@
           <div class="section">
             <p class="section-label">OPERATE</p>
 
+            <button
+              id="aistudio-attachment-toggle"
+              class="attachment-toggle hidden is-on"
+              type="button"
+              role="switch"
+              aria-checked="true"
+              aria-describedby="aistudio-attachment-description"
+            >
+              <span class="attachment-toggle-copy">
+                <span class="attachment-toggle-title">Attachment text</span>
+                <span
+                  id="aistudio-attachment-description"
+                  class="attachment-toggle-description"
+                >Include pasted files in the export</span>
+              </span>
+              <span class="attachment-switch" aria-hidden="true">
+                <span class="attachment-switch-label">ON</span>
+                <span class="attachment-switch-knob"></span>
+              </span>
+            </button>
+
             <!-- Copy as Markdown Button -->
             <button id="copy-btn" class="action-btn primary-btn">
               <svg
@@ -203,6 +224,54 @@
                 </svg>
                 <span class="btn-text">Download</span>
               </button>
+            </div>
+
+            <!-- Recent Batch Download Row -->
+            <div id="claude-batch-section" class="batch-section hidden">
+              <p id="batch-section-label" class="section-label">RECENT BATCH</p>
+              <div class="action-row batch-row">
+                <div class="batch-limit-control">
+                  <select id="claude-batch-limit" class="batch-select">
+                    <option value="10">Recent 10</option>
+                    <option value="20">Recent 20</option>
+                    <option value="50">Recent 50</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                  <input
+                    id="claude-batch-custom-limit"
+                    class="batch-custom-input hidden"
+                    type="number"
+                    min="1"
+                    max="500"
+                    step="1"
+                    value="100"
+                    aria-label="Custom recent conversation count"
+                  />
+                </div>
+
+                <button
+                  id="claude-batch-download-btn"
+                  class="action-btn secondary-btn relative"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="btn-icon"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" x2="12" y1="15" y2="3"></line>
+                  </svg>
+                  <span class="btn-text">Download Recent</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

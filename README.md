@@ -4,7 +4,7 @@
 
 ![Preview](assets/preview.png)
 
-A Chrome extension to export AI conversations from Google AI Studio, ChatGPT, and Gemini.
+A Chrome extension to export AI conversations from Google AI Studio, ChatGPT, Gemini, and Claude.
 
 ## Inspiration & Motivation
 
@@ -22,9 +22,11 @@ I created this "parody" version because I found the original tool's support for 
 - ✅ Export conversations from Google AI Studio
 - ✅ Export conversations from ChatGPT
 - ✅ Export conversations from Gemini (with Thoughts content)
+- ✅ Export conversations from Claude
 - ✅ Support for Markdown and JSON formats
 - ✅ Clean, modern UI with Inter font
-- ✅ Auto-scroll to capture full conversation history
+- ✅ API/RPC-first export for Google AI Studio, ChatGPT, Gemini, and Claude
+- ✅ Auto-scroll fallback when an authenticated data request is unavailable
 - 🚀 **Smart ZIP Package Export** - Download conversations with all embedded media (images, videos) automatically packaged!
 
 ### 🎯 Smart ZIP Package Export
@@ -68,13 +70,28 @@ _Example: Exported HTML with rich media, beautiful typography, and dark theme_
 - **Google AI Studio** - https://aistudio.google.com
 - **ChatGPT** - https://chatgpt.com
 - **Gemini** - https://gemini.google.com
+- **Claude** - https://claude.ai
 
 ## Usage
 
-1. Navigate to AI Studio, ChatGPT, or Gemini
+1. Navigate to AI Studio, ChatGPT, Gemini, or Claude
 2. Click the extension icon
 3. Choose your export format (Markdown or JSON)
 4. Click "Export" to download or copy to clipboard
+
+For Google AI Studio, reload the saved prompt once after installing or updating
+the extension. The extension then reuses AI Studio's authenticated, read-only
+MakerSuite RPC to export the full prompt without scrolling. Unsaved `new_*`
+prompts and unavailable RPC sessions automatically use the DOM fallback.
+Pasted-text attachments are read from their Drive-backed file IDs in the page's
+authenticated session and inlined into the export; access tokens never leave
+the page bridge or appear in exported files. Both AI Studio `fetch` and XHR
+request transports are retained so Drive attachment access uses the same signed-in
+request context as the prompt. Attachment success and failure counts are included
+in export metadata. The AI Studio popup includes a remembered **Attachment text**
+switch: turn it off to keep attachment references without requesting Drive content.
+Attachment metadata and text are fetched with bounded concurrency and cached in
+the page bridge for faster repeat exports.
 
 ## Development
 

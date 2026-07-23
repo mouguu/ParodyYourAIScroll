@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "ParodyYourAIScroll",
-  "version": "2.0",
-  "description": "Export Google AI Studio conversations to Markdown.",
+  "version": "2.5",
+  "description": "Export AI conversations from AI Studio, ChatGPT, Gemini, and Claude.",
   "permissions": ["activeTab", "scripting", "storage", "downloads"],
   "host_permissions": [
     "https://aistudio.google.com/*",
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
-    "https://gemini.google.com/*"
+    "https://gemini.google.com/*",
+    "https://claude.ai/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -27,13 +28,20 @@
         "https://aistudio.google.com/*",
         "https://chatgpt.com/*",
         "https://chat.openai.com/*",
-        "https://gemini.google.com/*"
+        "https://gemini.google.com/*",
+        "https://claude.ai/*"
       ],
       "js": ["libs/jszip.min.js", "template.js", "content.js", "gemini_exporter.js"]
     },
     {
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
       "js": ["chatgpt_token.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://aistudio.google.com/*"],
+      "js": ["aistudio_rpc_bridge.js"],
       "world": "MAIN",
       "run_at": "document_start"
     }
