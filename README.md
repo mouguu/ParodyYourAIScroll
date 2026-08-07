@@ -4,7 +4,7 @@
 
 ![Preview](assets/preview.png)
 
-A Chrome extension to export AI conversations from Google AI Studio, ChatGPT, Gemini, and Claude.
+A Chrome extension to export AI conversations from Google AI Studio, ChatGPT, Gemini, Claude, and Qwen.
 
 ## Inspiration & Motivation
 
@@ -23,9 +23,11 @@ I created this "parody" version because I found the original tool's support for 
 - ✅ Export conversations from ChatGPT
 - ✅ Export conversations from Gemini (with Thoughts content)
 - ✅ Export conversations from Claude
+- ✅ Export conversations from Qwen (messages, thinking summaries, web sources, and attachment links)
+- ✅ Batch-download recent Qwen conversations as one ZIP (10/20/50/custom)
 - ✅ Support for Markdown and JSON formats
 - ✅ Clean, modern UI with Inter font
-- ✅ API/RPC-first export for Google AI Studio, ChatGPT, Gemini, and Claude
+- ✅ API/RPC-first export for Google AI Studio, ChatGPT, Gemini, Claude, and Qwen
 - ✅ Auto-scroll fallback when an authenticated data request is unavailable
 - 🚀 **Smart ZIP Package Export** - Download conversations with all embedded media (images, videos) automatically packaged!
 
@@ -71,10 +73,11 @@ _Example: Exported HTML with rich media, beautiful typography, and dark theme_
 - **ChatGPT** - https://chatgpt.com
 - **Gemini** - https://gemini.google.com
 - **Claude** - https://claude.ai
+- **Qwen** - https://chat.qwen.ai
 
 ## Usage
 
-1. Navigate to AI Studio, ChatGPT, Gemini, or Claude
+1. Navigate to AI Studio, ChatGPT, Gemini, Claude, or a specific Qwen conversation
 2. Click the extension icon
 3. Choose your export format (Markdown or JSON)
 4. Click "Export" to download or copy to clipboard
@@ -92,6 +95,18 @@ in export metadata. The AI Studio popup includes a remembered **Attachment text*
 switch: turn it off to keep attachment references without requesting Drive content.
 Attachment metadata and text are fetched with bounded concurrency and cached in
 the page bridge for faster repeat exports.
+
+For Qwen, open a specific `/c/<conversation-id>` conversation and refresh the
+page once after installing or updating the extension. The extension reads the
+authenticated `/api/v2/chats/<conversation-id>` history response, including the
+current branch, thinking summaries, web-search sources, and uploaded image/video
+links. If Qwen's request security layer blocks a direct read, the page bridge
+replays the already captured read-only request without exposing cookies or
+security headers to the extension content script. A rendered-page fallback is
+kept for sessions where neither API route is available.
+Qwen also supports recent-conversation batch export. The popup can package the
+latest 10, 20, 50, or a custom count (up to 500) into one ZIP, with one selected
+Markdown, JSON, HTML, or text export per conversation plus `_manifest.json`.
 
 ## Development
 

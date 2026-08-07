@@ -304,7 +304,7 @@ function cleanExportTheme(value) {
 
   return raw
     .replace(
-      /\s*[-|:]\s*(ChatGPT|OpenAI|Claude|Gemini|Google Gemini|Google AI Studio|AI Studio)\s*$/i,
+      /\s*[-|:]\s*(ChatGPT|OpenAI|Claude|Gemini|Google Gemini|Google AI Studio|AI Studio|Qwen|通义千问)\s*$/i,
       ""
     )
     .trim();
@@ -354,6 +354,14 @@ function inferExportPlatform(platform) {
     href.includes("claude.ai")
   ) {
     return "claude";
+  }
+
+  if (
+    raw.includes("qwen") ||
+    raw.includes("通义千问") ||
+    href.includes("chat.qwen.ai")
+  ) {
+    return "qwen";
   }
 
   if (

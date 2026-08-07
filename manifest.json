@@ -1,15 +1,17 @@
 {
   "manifest_version": 3,
   "name": "ParodyYourAIScroll",
-  "version": "2.5",
-  "description": "Export AI conversations from AI Studio, ChatGPT, Gemini, and Claude.",
+  "version": "2.6",
+  "description": "Export AI conversations from AI Studio, ChatGPT, Gemini, Claude, and Qwen.",
   "permissions": ["activeTab", "scripting", "storage", "downloads"],
   "host_permissions": [
     "https://aistudio.google.com/*",
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
     "https://gemini.google.com/*",
-    "https://claude.ai/*"
+    "https://claude.ai/*",
+    "https://chat.qwen.ai/*",
+    "https://cdn.qwenlm.ai/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -29,9 +31,16 @@
         "https://chatgpt.com/*",
         "https://chat.openai.com/*",
         "https://gemini.google.com/*",
-        "https://claude.ai/*"
+        "https://claude.ai/*",
+        "https://chat.qwen.ai/*"
       ],
-      "js": ["libs/jszip.min.js", "template.js", "content.js", "gemini_exporter.js"]
+      "js": [
+        "libs/jszip.min.js",
+        "template.js",
+        "qwen_exporter.js",
+        "content.js",
+        "gemini_exporter.js"
+      ]
     },
     {
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
@@ -42,6 +51,12 @@
     {
       "matches": ["https://aistudio.google.com/*"],
       "js": ["aistudio_rpc_bridge.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://chat.qwen.ai/*"],
+      "js": ["qwen_api_bridge.js"],
       "world": "MAIN",
       "run_at": "document_start"
     }

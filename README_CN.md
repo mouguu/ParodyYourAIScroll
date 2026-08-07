@@ -4,7 +4,7 @@
 
 ![Preview](assets/preview.png)
 
-一款用于从 Google AI Studio、ChatGPT、Gemini 和 Claude 导出 AI 对话记录的 Chrome 扩展插件。
+一款用于从 Google AI Studio、ChatGPT、Gemini、Claude 和 Qwen 导出 AI 对话记录的 Chrome 扩展插件。
 
 ## 💡 灵感与动机
 
@@ -23,9 +23,11 @@
 - ✅ 支持从 **ChatGPT** 导出对话
 - ✅ 支持从 **Gemini** 导出对话（支持导出思考/Thoughts 内容）
 - ✅ 支持从 **Claude** 导出对话
+- ✅ 支持从 **Qwen** 导出对话（消息、思考摘要、联网来源和附件链接）
+- ✅ 支持把最近 10/20/50/自定义数量的 Qwen 对话批量下载为一个 ZIP
 - ✅ 支持导出为 **Markdown** 和 **JSON** 格式
 - ✅ 干净、现代的 UI 界面（采用 Inter 字体）
-- ✅ Google AI Studio、ChatGPT、Gemini 和 Claude 优先通过 API/RPC 导出
+- ✅ Google AI Studio、ChatGPT、Gemini、Claude 和 Qwen 优先通过 API/RPC 导出
 - ✅ 登录态数据接口不可用时自动回退到滚动抓取
 - 🚀 **智能 ZIP 打包导出** - 自动下载并将对话中嵌入的所有媒体文件（图片、视频）打包！
 
@@ -71,10 +73,11 @@ _示例：包含丰富媒体资源、精美排版和深色主题的 HTML 导出�
 - **ChatGPT** - https://chatgpt.com
 - **Gemini** - https://gemini.google.com
 - **Claude** - https://claude.ai
+- **Qwen** - https://chat.qwen.ai
 
 ## 📖 使用指南
 
-1. 打开 AI Studio、ChatGPT、Gemini 或 Claude 网页并进入任意对话
+1. 打开 AI Studio、ChatGPT、Gemini、Claude，或进入一个具体的 Qwen 对话
 2. 点击浏览器右上角的插件图标
 3. 选择您需要的导出格式（Markdown, JSON 或 HTML）
 4. 点击 "**Export**" 按钮进行下载，或复制内容到剪贴板
@@ -89,6 +92,14 @@ AI Studio 的 `fetch` 与 XHR 请求模板，确保附件读取复用 Prompt 的
 “Attachment text”开关；关闭后只保留附件引用，不再请求 Drive 正文。
 附件元数据和正文会采用限流并发读取，并在页面桥接层短期缓存，让同一 Prompt 的
 重复复制或下载更快。
+
+Qwen 用户需要先打开一个具体的 `/c/<conversation-id>` 对话，并在安装或更新插件后刷新一次页面。
+插件会读取登录态下的 `/api/v2/chats/<conversation-id>` 历史响应，保留当前分支、思考摘要、
+联网搜索来源以及上传的图片/视频链接。如果 Qwen 的请求安全层阻止插件直接读取，页面桥接脚本会
+复用已经捕获的只读请求；Cookie 和安全请求头不会传给扩展的内容脚本。两条接口路径都不可用时，
+插件仍会回退到当前已渲染页面。
+Qwen 弹窗同时提供最近会话批量导出，可选择最近 10、20、50 条或自定义数量（最多 500）。
+批量结果为一个 ZIP，其中每个会话按所选格式保存，并附带 `_manifest.json` 汇总成功与失败状态。
 
 ## 🛠️ 技术栈
 

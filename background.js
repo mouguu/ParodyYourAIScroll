@@ -7,8 +7,9 @@ function updatePopup(tabId, url) {
   const isChatGPT = url.includes("chatgpt.com") || url.includes("chat.openai.com");
   const isGemini = url.includes("gemini.google.com");
   const isClaude = url.includes("claude.ai");
+  const isQwen = url.includes("chat.qwen.ai");
 
-  if (isAIStudio || isChatGPT || isGemini || isClaude) {
+  if (isAIStudio || isChatGPT || isGemini || isClaude || isQwen) {
     chrome.action.setPopup({ tabId: tabId, popup: "supported.html" });
   } else {
     chrome.action.setPopup({ tabId: tabId, popup: "unsupported.html" });
