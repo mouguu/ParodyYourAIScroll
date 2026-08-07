@@ -1176,6 +1176,9 @@
     if (href.includes("claude.ai")) {
       return { source: "Claude", model: "Claude" };
     }
+    if (href.includes("chat.qwen.ai")) {
+      return { source: "Qwen", model: "Qwen" };
+    }
     return { source: "Google AI Studio", model: "Gemini" };
   }
 
@@ -1224,9 +1227,17 @@
     }
     if (typeof meta.attachmentCount === "number" && meta.attachmentCount > 0) {
       lines.push(`- Referenced attachments: \`${meta.attachmentCount}\``);
+    }
+    if (typeof meta.attachmentContentEnabled === "boolean") {
       lines.push(
         `- Attachment text capture: \`${meta.attachmentContentEnabled === false ? "disabled" : "enabled"}\``
       );
+    }
+    if (typeof meta.citationCount === "number" && meta.citationCount > 0) {
+      lines.push(`- Captured citations: \`${meta.citationCount}\``);
+    }
+    if (typeof meta.branchCount === "number" && meta.branchCount > 1) {
+      lines.push(`- Detected response branches: \`${meta.branchCount}\``);
     }
     if (
       typeof meta.attachmentInlinedTextCount === "number" &&
@@ -1362,7 +1373,7 @@
 
     if (
       cleanedDocumentTitle &&
-      !/^(ChatGPT|Claude|Gemini|Google Gemini|Google AI Studio|AI Chat Export)$/i.test(
+      !/^(ChatGPT|Claude|Gemini|Qwen|通义千问|Google Gemini|Google AI Studio|AI Chat Export)$/i.test(
         cleanedDocumentTitle
       )
     ) {
@@ -1471,6 +1482,8 @@
         exportMeta.thinkingMessageCount
       );
       appendYamlField(yamlLines, "attachment_count", exportMeta.attachmentCount);
+      appendYamlField(yamlLines, "citation_count", exportMeta.citationCount);
+      appendYamlField(yamlLines, "branch_count", exportMeta.branchCount);
       appendYamlField(
         yamlLines,
         "attachment_content_enabled",
@@ -1753,6 +1766,24 @@
           textContent = textContent.replace(/\*(.*?)\*/g, "<em>$1</em>");
 
           content += textContent;
+        }
+
+        if (item.images && item.images.length > 0) {
+          content += '<div class="media-container">';
+          item.images.forEach((img) => {
+            content += `<img src="${img.base64}" alt="${escapeHtml(
+              img.alt || "Generated image"
+            )}">`;
+          });
+          content += "</div>";
+        }
+
+        if (item.videos && item.videos.length > 0) {
+          content += '<div class="media-container">';
+          item.videos.forEach((vid) => {
+            content += `<video controls><source src="${vid.base64}" type="video/mp4">Your browser does not support video.</video>`;
+          });
+          content += "</div>";
         }
 
         content += `</div>`; // Close model-content
@@ -2934,6 +2965,491 @@
     }
 
     return structuredData;
+  }
+
+  // --- Qwen Logic (authenticated history API, page bridge, DOM fallback) ---
+
+  const QWEN_BRIDGE_REQUEST_TYPE = "QWEN_CHAT_DATA_REQUEST";
+  const QWEN_BRIDGE_RESPONSE_TYPE = "QWEN_CHAT_DATA_RESULT";
+  const QWEN_LIST_BRIDGE_REQUEST_TYPE = "QWEN_CHAT_LIST_REQUEST";
+  const QWEN_LIST_BRIDGE_RESPONSE_TYPE = "QWEN_CHAT_LIST_RESULT";
+  const QWEN_HISTORY_PAGE_LIMIT = 10;
+  const QWEN_MAX_HISTORY_PAGES = 50;
+
+  function getQwenExporter() {
+    const exporter = globalThis.ParodyQwenExporter;
+    if (!exporter) {
+      throw new Error(
+        "Qwen exporter module is unavailable. Reload the extension and refresh Qwen."
+      );
+    }
+    return exporter;
+  }
+
+  function getQwenConversationIdFromUrl() {
+    return getQwenExporter().getConversationId(location.pathname);
+  }
+
+  function buildQwenHistoryUrl(chatId, params = {}) {
+    const search = new URLSearchParams();
+    if (params.cursor) search.set("cursor", params.cursor);
+    search.set("direction", params.direction || "up");
+    search.set("limit", String(params.limit || QWEN_HISTORY_PAGE_LIMIT));
+    return `/api/v2/chats/${encodeURIComponent(chatId)}?${search.toString()}`;
+  }
+
+  async function fetchQwenHistoryPageDirect(chatId, params = {}) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+      const url = buildQwenHistoryUrl(chatId, params);
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error(
+          `Qwen API ${response.status} ${response.statusText || ""}`.trim()
+        );
+      }
+      const payload = await response.json();
+      if (!payload || payload.success === false || !payload.data?.chat) {
+        throw new Error("Qwen API returned no conversation history.");
+      }
+      return payload;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  async function fetchQwenConversationListPageDirect(page) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+      const search = new URLSearchParams({
+        page: String(page),
+        exclude_project: "true",
+      });
+      const response = await fetch(`/api/v2/chats/?${search.toString()}`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error(
+          `Qwen chat list API ${response.status} ${response.statusText || ""}`.trim()
+        );
+      }
+      const payload = await response.json();
+      if (!payload || payload.success === false || !Array.isArray(payload.data)) {
+        throw new Error("Qwen chat list API returned an invalid response.");
+      }
+      return payload;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  function fetchQwenHistoryPageFromBridge(chatId, params = {}) {
+    return new Promise((resolve, reject) => {
+      const requestId = `qwen-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}`;
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        window.removeEventListener("message", onMessage);
+        callback(value);
+      };
+      const onMessage = (event) => {
+        if (
+          event.source !== window ||
+          event.data?.type !== QWEN_BRIDGE_RESPONSE_TYPE ||
+          event.data?.requestId !== requestId
+        ) {
+          return;
+        }
+        if (!event.data.success) {
+          finish(
+            reject,
+            new Error(event.data.error || "Qwen page bridge request failed.")
+          );
+          return;
+        }
+        try {
+          const payload = JSON.parse(event.data.responseText);
+          if (!payload || payload.success === false || !payload.data?.chat) {
+            throw new Error("Qwen page bridge returned no conversation history.");
+          }
+          finish(resolve, payload);
+        } catch (error) {
+          finish(reject, error);
+        }
+      };
+      const timeoutId = setTimeout(
+        () =>
+          finish(
+            reject,
+            new Error(
+              "Qwen page bridge timed out. Refresh the Qwen page once and retry."
+            )
+          ),
+        13000
+      );
+
+      window.addEventListener("message", onMessage);
+      window.postMessage(
+        {
+          type: QWEN_BRIDGE_REQUEST_TYPE,
+          requestId,
+          chatId,
+          cursor: params.cursor || null,
+          direction: params.direction || "up",
+          limit: params.limit || QWEN_HISTORY_PAGE_LIMIT,
+        },
+        "*"
+      );
+    });
+  }
+
+  function fetchQwenConversationListPageFromBridge(page) {
+    return new Promise((resolve, reject) => {
+      const requestId = `qwen-list-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}`;
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        window.removeEventListener("message", onMessage);
+        callback(value);
+      };
+      const onMessage = (event) => {
+        if (
+          event.source !== window ||
+          event.data?.type !== QWEN_LIST_BRIDGE_RESPONSE_TYPE ||
+          event.data?.requestId !== requestId
+        ) {
+          return;
+        }
+        if (!event.data.success) {
+          finish(
+            reject,
+            new Error(event.data.error || "Qwen chat-list bridge request failed.")
+          );
+          return;
+        }
+        try {
+          const payload = JSON.parse(event.data.responseText);
+          if (!payload || payload.success === false || !Array.isArray(payload.data)) {
+            throw new Error("Qwen chat-list bridge returned an invalid response.");
+          }
+          finish(resolve, payload);
+        } catch (error) {
+          finish(reject, error);
+        }
+      };
+      const timeoutId = setTimeout(
+        () =>
+          finish(
+            reject,
+            new Error(
+              "Qwen chat-list bridge timed out. Refresh the Qwen page once and retry."
+            )
+          ),
+        13000
+      );
+
+      window.addEventListener("message", onMessage);
+      window.postMessage(
+        {
+          type: QWEN_LIST_BRIDGE_REQUEST_TYPE,
+          requestId,
+          page,
+          exclude_project: true,
+        },
+        "*"
+      );
+    });
+  }
+
+  async function fetchQwenConversationListPage(page) {
+    try {
+      return await fetchQwenConversationListPageDirect(page);
+    } catch (directError) {
+      console.info(
+        "[Qwen Batch] Direct chat-list request failed; trying page bridge:",
+        directError
+      );
+      try {
+        return await fetchQwenConversationListPageFromBridge(page);
+      } catch (bridgeError) {
+        throw new Error(
+          `Direct list request: ${directError.message}; page bridge: ${bridgeError.message}`
+        );
+      }
+    }
+  }
+
+  async function fetchQwenConversationList(limit) {
+    const normalizedLimit = normalizeClaudeBatchLimit(limit);
+    const conversations = [];
+    const seen = new Set();
+
+    for (let page = 1; page <= 100 && conversations.length < normalizedLimit; page++) {
+      const payload = await fetchQwenConversationListPage(page);
+      const items = Array.isArray(payload.data) ? payload.data : [];
+      if (!items.length) break;
+
+      let addedCount = 0;
+      for (const item of items) {
+        const uuid = String(item?.id || "").trim().toLowerCase();
+        if (!UUID_PATTERN.test(uuid) || seen.has(uuid)) continue;
+        seen.add(uuid);
+        addedCount += 1;
+        conversations.push({
+          uuid,
+          name:
+            typeof item.title === "string" && item.title.trim()
+              ? item.title.trim()
+              : "Untitled Qwen conversation",
+          updatedAtUtc: getQwenExporter().timestampToIso(item.updated_at),
+          createdAtUtc: getQwenExporter().timestampToIso(item.created_at),
+        });
+        if (conversations.length >= normalizedLimit) break;
+      }
+      if (!addedCount) break;
+    }
+
+    return conversations.slice(0, normalizedLimit);
+  }
+
+  async function fetchQwenHistoryPage(chatId, params = {}) {
+    try {
+      return {
+        payload: await fetchQwenHistoryPageDirect(chatId, params),
+        extractionMode: "qwen_api",
+      };
+    } catch (directError) {
+      console.info(
+        "[Qwen Fetch] Direct history request failed; trying page bridge:",
+        directError
+      );
+      try {
+        return {
+          payload: await fetchQwenHistoryPageFromBridge(chatId, params),
+          extractionMode: "qwen_api_bridge",
+        };
+      } catch (bridgeError) {
+        throw new Error(
+          `Direct request: ${directError.message}; page bridge: ${bridgeError.message}`
+        );
+      }
+    }
+  }
+
+  async function fetchQwenConversation(chatId) {
+    const exporter = getQwenExporter();
+    const initial = await fetchQwenHistoryPage(chatId, {
+      direction: "up",
+      limit: QWEN_HISTORY_PAGE_LIMIT,
+    });
+    const combinedPayload = initial.payload;
+    let extractionMode = initial.extractionMode;
+    let pagination = exporter.getPagination(combinedPayload);
+    const seenCursors = new Set();
+    let pageCount = 1;
+
+    while (
+      pagination?.enabled === true &&
+      pagination.has_more_older === true &&
+      pageCount < QWEN_MAX_HISTORY_PAGES
+    ) {
+      const cursor = String(pagination.oldest_id || "");
+      if (!cursor || seenCursors.has(cursor)) {
+        throw new Error("Qwen history pagination returned a repeated cursor.");
+      }
+      seenCursors.add(cursor);
+      const page = await fetchQwenHistoryPage(chatId, {
+        cursor,
+        direction: "up",
+        limit: QWEN_HISTORY_PAGE_LIMIT,
+      });
+      exporter.mergeConversationPayload(combinedPayload, page.payload);
+      if (page.extractionMode === "qwen_api_bridge") {
+        extractionMode = page.extractionMode;
+      }
+      pagination = exporter.getPagination(combinedPayload);
+      pageCount += 1;
+    }
+
+    if (pagination?.enabled === true && pagination.has_more_older === true) {
+      throw new Error(
+        `Qwen history still has older messages after ${QWEN_MAX_HISTORY_PAGES} pages.`
+      );
+    }
+
+    return { payload: combinedPayload, extractionMode };
+  }
+
+  async function hydrateQwenMedia(structuredData) {
+    for (const item of structuredData) {
+      const media = Array.isArray(item?.qwenMedia) ? item.qwenMedia : [];
+      const seen = new Set();
+      for (const reference of media) {
+        if (!reference?.url || seen.has(reference.url)) continue;
+        seen.add(reference.url);
+        try {
+          const base64 = await fetchAsBase64(reference.url, 1);
+          if (!base64) continue;
+          if (reference.kind === "video") {
+            item.videos.push({
+              base64,
+              filename: reference.alt || "qwen-video.mp4",
+            });
+          } else if (reference.kind === "image") {
+            item.images.push({
+              base64,
+              alt: reference.alt || "Qwen image",
+            });
+          }
+        } catch (error) {
+          console.info(
+            "[Qwen Media] Keeping remote attachment after embed failure:",
+            error
+          );
+        }
+      }
+    }
+  }
+
+  async function processQwenData(conversationData, options = {}) {
+    const result = getQwenExporter().processConversation(
+      conversationData.payload,
+      {
+        conversationId: options.conversationId,
+        extractionMode:
+          conversationData.extractionMode || options.extractionMode || "qwen_api",
+      }
+    );
+    const structuredData = attachExportMeta(result.messages, result.meta);
+    if (options.includeImageData) {
+      await hydrateQwenMedia(structuredData);
+    }
+    return structuredData;
+  }
+
+  function extractQwenDataFromDOM() {
+    const nodes = Array.from(
+      document.querySelectorAll(
+        ".qwen-chat-message-user, .qwen-chat-message-assistant"
+      )
+    );
+    const messages = [];
+
+    for (const node of nodes) {
+      const isUser = node.classList?.contains("qwen-chat-message-user");
+      const isAssistant = node.classList?.contains(
+        "qwen-chat-message-assistant"
+      );
+      if (!isUser && !isAssistant) continue;
+      const role = isUser ? "user" : "model";
+      const contentNode = isUser
+        ? node.querySelector(
+            ".qwen-message-content-text, .chat-user-message-text-renderer-omni, .qwen-message-content"
+          ) || node
+        : node.querySelector(
+            ".response-message-content .qwen-markdown, .qwen-markdown, .response-message-content"
+          ) || node;
+      let text = (contentNode.innerText || contentNode.textContent || "").trim();
+      const thoughtNode = isAssistant
+        ? node.querySelector(
+            '[class*="thinking-summary"] .qwen-markdown, [class*="thinking"] [class*="summary"]'
+          )
+        : null;
+      const thoughtText = (
+        thoughtNode?.innerText || thoughtNode?.textContent || ""
+      ).trim();
+      const qwenMedia = [];
+
+      node.querySelectorAll("img[src], video[src]").forEach((media, index) => {
+        const src = media.currentSrc || media.getAttribute("src");
+        if (!src || isEmbeddedDataUrl(src)) return;
+        const kind = media.tagName === "VIDEO" ? "video" : "image";
+        const alt = media.getAttribute("alt") || `Qwen ${kind} ${index + 1}`;
+        qwenMedia.push({ kind, url: src, alt });
+        const marker =
+          kind === "image" ? `![${alt}](${src})` : `[${alt}](${src})`;
+        if (!text.includes(marker)) {
+          text += `${text ? "\n\n" : ""}${marker}`;
+        }
+      });
+
+      if (!text && !thoughtText) continue;
+      messages.push({
+        domOrder: messages.length,
+        type: role,
+        userText: role === "user" ? text : null,
+        thoughtText: role === "model" ? thoughtText || null : null,
+        responseText: role === "model" ? text : null,
+        images: [],
+        videos: [],
+        attachments: qwenMedia.map((item) => ({
+          kind: item.kind,
+          name: item.alt,
+          url: item.url,
+        })),
+        citations: [],
+        qwenMedia,
+      });
+    }
+
+    if (!messages.length) return [];
+    const chatId = getQwenConversationIdFromUrl();
+    const userMessageCount = messages.filter(
+      (message) => message.type === "user"
+    ).length;
+    const assistantMessageCount = messages.filter(
+      (message) => message.type === "model"
+    ).length;
+    return attachExportMeta(messages, {
+      source: "Qwen",
+      model: "Qwen",
+      platform: "QWEN",
+      extractionMode: "qwen_dom",
+      conversationUuid: chatId,
+      conversationTitle:
+        typeof document.title === "string"
+          ? document.title
+              .replace(/\s*[|-]\s*(?:Qwen|通义千问)\s*$/i, "")
+              .trim()
+          : null,
+      createdAtUtc: null,
+      updatedAtUtc: null,
+      totalConversationMessageCount: messages.length,
+      exportedMessageCount: messages.length,
+      userMessageCount,
+      assistantMessageCount,
+      thinkingMessageCount: messages.filter((message) => message.thoughtText)
+        .length,
+      attachmentCount: messages.reduce(
+        (count, message) => count + message.attachments.length,
+        0
+      ),
+      citationCount: 0,
+      branchCount: 1,
+      artifactCount: 0,
+      researchTaskCount: 0,
+      presentedFileCount: 0,
+    });
   }
 
   const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -4737,6 +5253,176 @@
     };
   }
 
+  function getQwenConversationListLabel(conversation) {
+    const title =
+      typeof conversation?.name === "string" && conversation.name.trim()
+        ? conversation.name.trim()
+        : conversation?.uuid || "Untitled Qwen conversation";
+    return title.length > 54 ? `${title.slice(0, 51)}...` : title;
+  }
+
+  function buildQwenBatchZipFilename(limit, exportedCount, conversations) {
+    const count = exportedCount || limit;
+    const ids = Array.isArray(conversations)
+      ? conversations.map((item) => item.uuid).filter(Boolean)
+      : [];
+
+    if (typeof window.buildExportFilename === "function") {
+      return window.buildExportFilename({
+        platform: "Qwen",
+        theme: `recent-${count}-conversations`,
+        extension: "zip",
+        hashSeed: ids.join("|") || `${limit}|${Date.now()}`,
+      });
+    }
+
+    const date = new Date().toISOString().slice(0, 10);
+    return `qwen-recent-${count}-conversations-${date}.zip`;
+  }
+
+  async function exportQwenRecentConversations(request = {}) {
+    const limit = normalizeClaudeBatchLimit(request.limit);
+    const requestedFormat = normalizeClaudeBatchFormat(request.format);
+    const contentFormat = getClaudeBatchContentFormat(requestedFormat);
+    const extension = getClaudeBatchContentExtension(contentFormat);
+    const ZipLib =
+      (typeof JSZip !== "undefined" ? JSZip : undefined) || window.JSZip;
+
+    if (!ZipLib) {
+      throw new Error(
+        "JSZip not loaded. Please go to chrome://extensions and reload this extension."
+      );
+    }
+
+    logToPopup(`Fetching recent ${limit} Qwen conversations...`);
+    const conversations = await fetchQwenConversationList(limit);
+    if (!conversations.length) {
+      throw new Error("Qwen returned no recent conversations.");
+    }
+
+    const zip = new ZipLib();
+    const usedNames = new Set();
+    const manifest = {
+      generated_at_utc: new Date().toISOString(),
+      source: "Qwen",
+      requested_limit: limit,
+      returned_count: conversations.length,
+      selected_format: requestedFormat,
+      export_format: contentFormat,
+      conversations: [],
+    };
+    let exportedCount = 0;
+    let firstError = null;
+
+    for (let index = 0; index < conversations.length; index++) {
+      const conversation = conversations[index];
+      const label = getQwenConversationListLabel(conversation);
+      try {
+        logToPopup(
+          `Exporting ${index + 1}/${conversations.length}: ${label}`
+        );
+        const conversationData = await fetchQwenConversation(conversation.uuid);
+        const structuredData = await processQwenData(conversationData, {
+          conversationId: conversation.uuid,
+          includeImageData: contentFormat === "html",
+        });
+        const output = await formatClaudeBatchConversation(
+          structuredData,
+          contentFormat
+        );
+        const filename = buildExportFilenameForData(
+          structuredData,
+          extension,
+          {
+            title: conversation.name,
+            conversationId: conversation.uuid,
+            hashSeed: conversation.uuid,
+            platform: "Qwen",
+          }
+        );
+        const entryName = buildClaudeBatchEntryName(
+          usedNames,
+          index,
+          filename
+        );
+
+        zip.file(entryName, output);
+        exportedCount += 1;
+        manifest.conversations.push({
+          index: index + 1,
+          uuid: conversation.uuid,
+          title: conversation.name || null,
+          updated_at_utc: conversation.updatedAtUtc || null,
+          created_at_utc: conversation.createdAtUtc || null,
+          filename: entryName,
+          status: "ok",
+          extraction_mode:
+            getExportMeta(structuredData)?.extractionMode || null,
+          message_count: structuredData.length,
+        });
+      } catch (error) {
+        if (!firstError) firstError = error;
+        manifest.conversations.push({
+          index: index + 1,
+          uuid: conversation.uuid,
+          title: conversation.name || null,
+          updated_at_utc: conversation.updatedAtUtc || null,
+          created_at_utc: conversation.createdAtUtc || null,
+          status: "error",
+          error: String(error?.message || error),
+        });
+        console.warn(
+          `[Qwen Batch] Failed to export ${conversation.uuid}:`,
+          error
+        );
+      }
+
+      if (index < conversations.length - 1) {
+        await delay(CLAUDE_BATCH_REQUEST_DELAY_MS);
+      }
+    }
+
+    manifest.exported_count = exportedCount;
+    manifest.failed_count = conversations.length - exportedCount;
+    if (!exportedCount) {
+      throw new Error(
+        `No Qwen conversations could be exported. ${
+          firstError?.message || "Please refresh and try again."
+        }`
+      );
+    }
+
+    zip.file("_manifest.json", JSON.stringify(manifest, null, 2));
+    logToPopup(
+      `Generating Qwen batch ZIP (${exportedCount}/${conversations.length})...`
+    );
+    let lastZipProgress = 0;
+    const zipBlob = await zip.generateAsync({ type: "blob" }, (metadata) => {
+      const percent = Math.floor(metadata.percent || 0);
+      if (percent >= lastZipProgress + 20 || percent === 100) {
+        lastZipProgress = percent;
+        logToPopup(`Generating Qwen batch ZIP: ${percent}%`);
+      }
+    });
+    const zipFilename = buildQwenBatchZipFilename(
+      limit,
+      exportedCount,
+      conversations
+    );
+    downloadBlob(zipBlob, zipFilename);
+    logToPopup(
+      `Qwen batch ZIP ready: ${exportedCount}/${conversations.length} exported`,
+      "success"
+    );
+
+    return {
+      filename: zipFilename,
+      exportedCount,
+      totalCount: conversations.length,
+      failedCount: conversations.length - exportedCount,
+    };
+  }
+
   async function exportClaudeRecentConversations(request = {}) {
     const limit = normalizeClaudeBatchLimit(request.limit);
     const requestedFormat = normalizeClaudeBatchFormat(request.format);
@@ -4922,11 +5608,13 @@
             window.location.href.includes("chat.openai.com")
           ) {
             result = await exportChatGPTRecentConversations(request);
+          } else if (window.location.href.includes("chat.qwen.ai")) {
+            result = await exportQwenRecentConversations(request);
           } else if (window.location.href.includes("claude.ai")) {
             result = await exportClaudeRecentConversations(request);
           } else {
             throw new Error(
-              "Recent batch export currently supports ChatGPT and Claude in this content script."
+              "Recent batch export currently supports ChatGPT, Claude, and Qwen in this content script."
             );
           }
 
@@ -5040,6 +5728,45 @@
                 throw chatFetchError;
               }
             }
+
+          } else if (url.includes("chat.qwen.ai")) {
+            chrome.runtime.sendMessage({
+              action: "UPDATE_STATUS",
+              status: "Fetching Qwen conversation...",
+            });
+
+            const chatId = getQwenConversationIdFromUrl();
+            if (!chatId) {
+              throw new Error(
+                "Could not find Qwen conversation ID. Open a specific Qwen conversation first."
+              );
+            }
+
+            try {
+              const conversationData = await fetchQwenConversation(chatId);
+              chrome.runtime.sendMessage({
+                action: "UPDATE_STATUS",
+                status: "Processing Qwen messages...",
+              });
+              structuredData = await processQwenData(conversationData, {
+                conversationId: chatId,
+                includeImageData: targetFormat === "html",
+              });
+            } catch (qwenFetchError) {
+              console.info(
+                "[Qwen Fetch] History API unavailable; using DOM fallback:",
+                qwenFetchError
+              );
+              chrome.runtime.sendMessage({
+                action: "UPDATE_STATUS",
+                status: "Qwen API unavailable: using page fallback...",
+              });
+              structuredData = extractQwenDataFromDOM();
+              if (!structuredData.length) throw qwenFetchError;
+              if (targetFormat === "html") {
+                await hydrateQwenMedia(structuredData);
+              }
+            }
           } else if (url.includes("claude.ai")) {
             // Claude Logic
             chrome.runtime.sendMessage({
@@ -5136,7 +5863,7 @@
           if (targetFormat === "html") {
             finalOutput = await generateHTML(structuredData);
           } else if (targetFormat === "json") {
-            finalOutput = JSON.stringify(structuredData, null, 2);
+            finalOutput = formatData(structuredData, "json");
           } else {
             // Default Markdown
             finalOutput = formatData(structuredData, "markdown");

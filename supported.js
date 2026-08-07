@@ -73,6 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const isChatGPT = url && (url.includes("chatgpt.com") || url.includes("chat.openai.com"));
     const isGemini = url && url.includes("gemini.google.com");
     const isClaude = url && url.includes("claude.ai");
+    const isQwen = url && url.includes("chat.qwen.ai");
     const isClaudeRecents = isClaude && (() => {
       try {
         return new URL(url).pathname.startsWith("/recents");
@@ -121,6 +122,12 @@ document.addEventListener("DOMContentLoaded", () => {
         copyBtn.title = "Open a specific Claude chat to export a single conversation.";
         downloadBtn.title = "Open a specific Claude chat to export a single conversation.";
       }
+    } else if (isQwen) {
+      pageTitle.textContent = "Qwen - Conversation";
+      urlText.textContent = "https://chat.qwen.ai";
+      urlIcon.src = "https://www.google.com/s2/favicons?sz=64&domain_url=https://chat.qwen.ai";
+      claudeBatchSection?.classList.remove("hidden");
+      if (batchSectionLabel) batchSectionLabel.textContent = "QWEN RECENTS";
     }
   });
 
@@ -177,6 +184,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         "libs/jszip.min.js",
                         "template.js",
                         "gemini_exporter.js",
+                        "qwen_exporter.js",
                         "content.js",
                       ],
                     },
@@ -224,6 +232,23 @@ document.addEventListener("DOMContentLoaded", () => {
                       if (chrome.runtime.lastError) {
                         console.info(
                           "AI Studio RPC bridge injection needs a page refresh:",
+                          chrome.runtime.lastError.message
+                        );
+                      }
+                      injectContentDependencies();
+                    }
+                  );
+                } else if (tabs[0].url?.includes("chat.qwen.ai")) {
+                  chrome.scripting.executeScript(
+                    {
+                      target: { tabId: tabs[0].id },
+                      files: ["qwen_api_bridge.js"],
+                      world: "MAIN",
+                    },
+                    () => {
+                      if (chrome.runtime.lastError) {
+                        console.info(
+                          "Qwen API bridge injection needs a page refresh:",
                           chrome.runtime.lastError.message
                         );
                       }
